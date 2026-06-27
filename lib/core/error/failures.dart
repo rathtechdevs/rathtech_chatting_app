@@ -26,6 +26,7 @@ final class AuthFailure extends Failure {
       : super('The verification code has expired. Please request a new one.');
   const AuthFailure.otpInvalid()
       : super('The verification code is incorrect.');
+  const AuthFailure.server([super.message = 'An authentication error occurred.']);
 }
 
 final class CacheFailure extends Failure {
