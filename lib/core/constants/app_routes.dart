@@ -1,0 +1,21 @@
+abstract final class AppRoutes {
+  static const splash = '/';
+  static const login = '/login';
+  static const otpVerification = '/otp-verification';
+  static const magicLinkSent = '/magic-link-sent';
+  static const setupProfile = '/setup-profile';
+  static const pair = '/pair';
+  static const generateInvite = '/pair/generate';
+  static const enterInvite = '/pair/enter';
+  static const chat = '/chat';
+  static const imageViewer = '/image-viewer';
+  static const myProfile = '/profile/me';
+  static const partnerProfile = '/profile/partner';
+  static const settings = '/settings';
+  static const notificationSettings = '/settings/notifications';
+  static const privacySettings = '/settings/privacy';
+  static const securitySettings = '/settings/security';
+  static const chatSettings = '/settings/chat';
+  static const accountSettings = '/settings/account';
+  static const appLock = '/app-lock';
+}
