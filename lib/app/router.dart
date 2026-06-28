@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/constants/app_routes.dart';
-import '../core/constants/app_strings.dart';
 import '../features/auth/domain/entities/auth_session.dart';
 import '../features/auth/domain/value_objects/phone_number.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
@@ -11,6 +10,7 @@ import '../features/auth/presentation/screens/magic_link_sent_screen.dart';
 import '../features/auth/presentation/screens/otp_verification_screen.dart';
 import '../features/auth/presentation/screens/setup_profile_screen.dart';
 import '../features/auth/providers.dart';
+import '../features/chat/presentation/screens/chat_screen.dart';
 import '../features/pairing/domain/entities/pair.dart';
 import '../features/pairing/presentation/screens/enter_invite_screen.dart';
 import '../features/pairing/presentation/screens/generate_invite_screen.dart';
@@ -151,58 +151,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => const EnterInviteScreen(),
       ),
 
-      // ── Milestone placeholder (replaced in M4) ─────────────────────────────
+      // ── Chat (M4) ──────────────────────────────────────────────────────────
       GoRoute(
         path: AppRoutes.chat,
-        builder: (_, state) => const _MilestonePlaceholder(
-          title: 'Chat',
-          milestone: 'M4',
-        ),
+        builder: (_, state) => const ChatScreen(),
       ),
     ],
   );
 });
-
-class _MilestonePlaceholder extends StatelessWidget {
-  const _MilestonePlaceholder({
-    required this.title,
-    required this.milestone,
-  });
-
-  final String title;
-  final String milestone;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.construction_rounded,
-              size: 64,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '$title — Coming in $milestone',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              AppStrings.appName,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.5),
-                  ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
