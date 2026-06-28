@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../../core/encryption/providers.dart';
 import '../../../../core/error/failure_message_mapper.dart';
 import '../../../profile/domain/use_cases/create_profile_use_case.dart';
 import '../../../profile/domain/value_objects/display_name.dart';
@@ -33,7 +35,7 @@ class SetupProfileViewModel extends Notifier<SetupProfileState> {
           }
         }
 
-        final result = await ref
+        final profileResult = await ref
             .read(createProfileUseCaseProvider)
             .execute(
               CreateProfileParams(
@@ -42,12 +44,35 @@ class SetupProfileViewModel extends Notifier<SetupProfileState> {
               ),
             );
 
-        state = result.fold(
-          (failure) => SetupProfileError(
-            FailureMessageMapper.toMessage(failure),
-          ),
-          (_) => const SetupProfileSuccess(),
-        );
+        if (profileResult.isLeft()) {
+          state = profileResult.fold(
+            (failure) => SetupProfileError(
+              FailureMessageMapper.toMessage(failure),
+            ),
+            (_) => const SetupProfileSuccess(),
+          );
+          return;
+        }
+
+        // Generate and publish Signal Protocol keys after profile creation.
+        final userId = Supabase.instance.client.auth.currentUser?.id;
+        if (userId != null) {
+          final keyResult = await ref
+              .read(keyGenerationServiceProvider)
+              .generateAndPublishKeys(userId);
+
+          if (keyResult.isLeft()) {
+            state = keyResult.fold(
+              (failure) => SetupProfileError(
+                FailureMessageMapper.toMessage(failure),
+              ),
+              (_) => const SetupProfileSuccess(),
+            );
+            return;
+          }
+        }
+
+        state = const SetupProfileSuccess();
       },
     );
   }
