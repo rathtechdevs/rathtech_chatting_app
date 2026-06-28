@@ -7,10 +7,12 @@ class ChatInputBar extends StatefulWidget {
     super.key,
     required this.onSend,
     this.isSending = false,
+    this.onTypingChanged,
   });
 
   final void Function(String text) onSend;
   final bool isSending;
+  final void Function(bool isTyping)? onTypingChanged;
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
@@ -27,6 +29,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
       final hasText = _controller.text.trim().isNotEmpty;
       if (hasText != _hasText) {
         setState(() => _hasText = hasText);
+        widget.onTypingChanged?.call(hasText);
       }
     });
   }

@@ -9,7 +9,11 @@ import 'data/data_sources/local/chat_local_data_source.dart';
 import 'data/data_sources/remote/chat_remote_data_source.dart';
 import 'data/repositories/chat_repository_impl.dart';
 import 'domain/repositories/chat_repository.dart';
+import 'domain/use_cases/delete_message_use_case.dart';
+import 'domain/use_cases/edit_message_use_case.dart';
 import 'domain/use_cases/load_more_messages_use_case.dart';
+import 'domain/use_cases/mark_all_read_use_case.dart';
+import 'domain/use_cases/react_to_message_use_case.dart';
 import 'domain/use_cases/send_message_use_case.dart';
 import 'domain/use_cases/watch_messages_use_case.dart';
 import 'presentation/viewmodels/chat_state.dart';
@@ -17,12 +21,10 @@ import 'presentation/viewmodels/chat_view_model.dart';
 
 // ── Pair / user helpers (non-nullable after router pair-gate) ─────────────────
 
-// Router guarantees current user is authenticated when /chat is reachable.
 final chatOwnUserIdProvider = Provider<String>((ref) {
   return ref.watch(currentUserIdProvider) ?? '';
 });
 
-// Router guarantees Pair is non-null when /chat is reachable.
 final chatPairIdProvider = Provider<String>((ref) {
   return ref.watch(pairStatusProvider).valueOrNull?.id ?? '';
 });
@@ -58,7 +60,7 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return impl;
 });
 
-// ── Use cases ─────────────────────────────────────────────────────────────────
+// ── Use cases — M4 ───────────────────────────────────────────────────────────
 
 final sendMessageUseCaseProvider = Provider<SendMessageUseCase>((ref) {
   return SendMessageUseCase(ref.watch(chatRepositoryProvider));
@@ -71,6 +73,24 @@ final watchMessagesUseCaseProvider = Provider<WatchMessagesUseCase>((ref) {
 final loadMoreMessagesUseCaseProvider = Provider<LoadMoreMessagesUseCase>(
   (ref) => LoadMoreMessagesUseCase(ref.watch(chatRepositoryProvider)),
 );
+
+// ── Use cases — M5 ───────────────────────────────────────────────────────────
+
+final editMessageUseCaseProvider = Provider<EditMessageUseCase>((ref) {
+  return EditMessageUseCase(ref.watch(chatRepositoryProvider));
+});
+
+final deleteMessageUseCaseProvider = Provider<DeleteMessageUseCase>((ref) {
+  return DeleteMessageUseCase(ref.watch(chatRepositoryProvider));
+});
+
+final reactToMessageUseCaseProvider = Provider<ReactToMessageUseCase>((ref) {
+  return ReactToMessageUseCase(ref.watch(chatRepositoryProvider));
+});
+
+final markAllReadUseCaseProvider = Provider<MarkAllReadUseCase>((ref) {
+  return MarkAllReadUseCase(ref.watch(chatRepositoryProvider));
+});
 
 // ── View model ────────────────────────────────────────────────────────────────
 

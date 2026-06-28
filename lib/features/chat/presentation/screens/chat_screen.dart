@@ -4,11 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/extensions/datetime_extensions.dart';
 import '../../domain/entities/message.dart';
+import '../../domain/entities/reaction.dart';
 import '../../providers.dart';
 import '../viewmodels/chat_state.dart';
 import '../widgets/chat_input_bar.dart';
 import '../widgets/date_separator.dart';
 import '../widgets/message_bubble.dart';
+import '../widgets/message_context_menu.dart';
+import '../widgets/typing_indicator.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -46,7 +49,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final ownUserId = ref.watch(chatOwnUserIdProvider);
 
     return Scaffold(
-      appBar: _buildAppBar(context),
+      appBar: _buildAppBar(context, state),
       body: Column(
         children: [
           Expanded(child: _buildBody(context, state, ownUserId)),
@@ -56,7 +59,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  AppBar _buildAppBar(BuildContext context) {
+  AppBar _buildAppBar(BuildContext context, ChatState state) {
+    final isTyping = state is ChatReady && state.isPartnerTyping;
     return AppBar(
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,14 +69,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             AppStrings.appName,
             style: Theme.of(context).textTheme.titleMedium,
           ),
-          Text(
-            AppStrings.chatOnline,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.6),
-                ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: isTyping
+                ? Text(
+                    AppStrings.chatTyping,
+                    key: const ValueKey('typing'),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                  )
+                : Text(
+                    AppStrings.chatOnline,
+                    key: const ValueKey('online'),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.6),
+                        ),
+                  ),
           ),
         ],
       ),
@@ -96,7 +112,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     if (state is ChatError) {
       return Center(
-        child: Text(state.message, style: Theme.of(context).textTheme.bodyMedium),
+        child: Text(state.message,
+            style: Theme.of(context).textTheme.bodyMedium),
       );
     }
 
@@ -104,16 +121,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final messages = ready.messages;
 
     if (messages.isEmpty) {
-      return _EmptyState();
+      return const _EmptyState();
     }
 
     return Stack(
       children: [
         _MessageList(
           messages: messages,
+          reactions: ready.reactions,
+          editedMessageIds: ready.editedMessageIds,
           ownUserId: ownUserId,
           scrollController: _scrollController,
           isLoadingMore: ready.isLoadingMore,
+          isPartnerTyping: ready.isPartnerTyping,
+          onLongPress: (message) =>
+              _showContextMenu(context, message, ownUserId),
         ),
         if (ready.sendError != null)
           Positioned(
@@ -130,34 +152,104 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final isSending = state is ChatReady && state.isSending;
     return ChatInputBar(
       isSending: isSending,
-      onSend: (text) => ref.read(chatViewModelProvider.notifier).sendMessage(text),
+      onSend: (text) =>
+          ref.read(chatViewModelProvider.notifier).sendMessage(text),
+      onTypingChanged: (isTyping) =>
+          ref.read(chatViewModelProvider.notifier).onTypingChanged(isTyping),
     );
+  }
+
+  void _showContextMenu(
+    BuildContext context,
+    Message message,
+    String ownUserId,
+  ) {
+    final vm = ref.read(chatViewModelProvider.notifier);
+    MessageContextMenu.show(
+      context,
+      message: message,
+      isOwn: message.isSentBy(ownUserId),
+      onReact: (emoji) => vm.reactToMessage(
+        messageId: message.id,
+        emoji: emoji,
+      ),
+      onEdit: () => _showEditDialog(context, message),
+      onDelete: () => vm.deleteMessage(message.id),
+    );
+  }
+
+  void _showEditDialog(BuildContext context, Message message) {
+    final controller = TextEditingController(text: message.text ?? '');
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(AppStrings.chatEditLabel),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: null,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newText = controller.text.trim();
+              if (newText.isNotEmpty && newText != message.text) {
+                ref.read(chatViewModelProvider.notifier).editMessage(
+                      messageId: message.id,
+                      pairId: ref.read(chatPairIdProvider),
+                      newText: newText,
+                      originalCreatedAt: message.createdAt,
+                    );
+              }
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    ).then((_) => controller.dispose());
   }
 }
 
 class _MessageList extends StatelessWidget {
   const _MessageList({
     required this.messages,
+    required this.reactions,
+    required this.editedMessageIds,
     required this.ownUserId,
     required this.scrollController,
     required this.isLoadingMore,
+    required this.isPartnerTyping,
+    required this.onLongPress,
   });
 
   final List<Message> messages;
+  final Map<String, List<Reaction>> reactions;
+  final Set<String> editedMessageIds;
   final String ownUserId;
   final ScrollController scrollController;
   final bool isLoadingMore;
+  final bool isPartnerTyping;
+  final void Function(Message) onLongPress;
 
   @override
   Widget build(BuildContext context) {
-    // Messages are oldest-first; we reverse the ListView so newest is at bottom.
-    final itemCount = messages.length + (isLoadingMore ? 1 : 0);
+    // +1 for loading spinner, +1 for typing indicator if active.
+    final extraTop = isLoadingMore ? 1 : 0;
+    final extraBottom = isPartnerTyping ? 1 : 0;
+    final itemCount = messages.length + extraTop + extraBottom;
 
     return ListView.builder(
       controller: scrollController,
       padding: const EdgeInsets.only(top: 8, bottom: 8),
       itemCount: itemCount,
       itemBuilder: (context, index) {
+        // Top loading spinner
         if (index == 0 && isLoadingMore) {
           return const Padding(
             padding: EdgeInsets.all(12),
@@ -165,18 +257,32 @@ class _MessageList extends StatelessWidget {
           );
         }
 
+        // Bottom typing indicator
+        if (index == itemCount - 1 && isPartnerTyping) {
+          return const TypingIndicator();
+        }
+
         final msgIndex = isLoadingMore ? index - 1 : index;
         final message = messages[msgIndex];
         final isOwn = message.isSentBy(ownUserId);
 
         final showDateSep = msgIndex == 0 ||
-            !messages[msgIndex - 1].createdAt.isSameDayAs(message.createdAt);
+            !messages[msgIndex - 1]
+                .createdAt
+                .isSameDayAs(message.createdAt);
 
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (showDateSep) DateSeparator(date: message.createdAt),
-            MessageBubble(message: message, isOwn: isOwn),
+            MessageBubble(
+              message: message,
+              isOwn: isOwn,
+              reactions: reactions[message.id] ?? const [],
+              ownUserId: ownUserId,
+              isEdited: editedMessageIds.contains(message.id),
+              onLongPress: () => onLongPress(message),
+            ),
           ],
         );
       },
@@ -185,6 +291,8 @@ class _MessageList extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -196,7 +304,10 @@ class _EmptyState extends StatelessWidget {
             Icon(
               Icons.lock_rounded,
               size: 64,
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+              color: Theme.of(context)
+                  .colorScheme
+                  .primary
+                  .withValues(alpha: 0.4),
             ),
             const SizedBox(height: 16),
             Text(

@@ -4,6 +4,7 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/extensions/datetime_extensions.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/message.dart';
+import '../../domain/entities/reaction.dart';
 import 'message_status_icon.dart';
 
 class MessageBubble extends StatelessWidget {
@@ -11,10 +12,18 @@ class MessageBubble extends StatelessWidget {
     super.key,
     required this.message,
     required this.isOwn,
+    required this.reactions,
+    required this.ownUserId,
+    required this.isEdited,
+    required this.onLongPress,
   });
 
   final Message message;
   final bool isOwn;
+  final List<Reaction> reactions;
+  final String ownUserId;
+  final bool isEdited;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -34,49 +43,72 @@ class MessageBubble extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       child: Align(
         alignment: isOwn ? Alignment.centerRight : Alignment.centerLeft,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.sizeOf(context).width * 0.75,
-          ),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: bubbleColor,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(18),
-                topRight: const Radius.circular(18),
-                bottomLeft: Radius.circular(isOwn ? 18 : 4),
-                bottomRight: Radius.circular(isOwn ? 4 : 18),
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    message.isDeleted
-                        ? AppStrings.chatMessageDeleted
-                        : (message.text ?? ''),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: message.isDeleted
-                              ? textColor.withValues(alpha: 0.6)
-                              : textColor,
-                          fontStyle: message.isDeleted
-                              ? FontStyle.italic
-                              : FontStyle.normal,
+        child: Column(
+          crossAxisAlignment:
+              isOwn ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(
+              onLongPress: message.isDeleted ? null : onLongPress,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width * 0.75,
+                ),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: bubbleColor,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(18),
+                      topRight: const Radius.circular(18),
+                      bottomLeft: Radius.circular(isOwn ? 18 : 4),
+                      bottomRight: Radius.circular(isOwn ? 4 : 18),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          message.isDeleted
+                              ? AppStrings.chatMessageDeleted
+                              : (message.text ?? ''),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                color: message.isDeleted
+                                    ? textColor.withValues(alpha: 0.6)
+                                    : textColor,
+                                fontStyle: message.isDeleted
+                                    ? FontStyle.italic
+                                    : FontStyle.normal,
+                              ),
                         ),
+                        const SizedBox(height: 2),
+                        _TimeRow(
+                          message: message,
+                          isOwn: isOwn,
+                          isEdited: isEdited,
+                          textColor: textColor,
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 2),
-                  _TimeRow(
-                    message: message,
-                    isOwn: isOwn,
-                    textColor: textColor,
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
+            if (reactions.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: _ReactionRow(
+                  reactions: reactions,
+                  ownUserId: ownUserId,
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -87,11 +119,13 @@ class _TimeRow extends StatelessWidget {
   const _TimeRow({
     required this.message,
     required this.isOwn,
+    required this.isEdited,
     required this.textColor,
   });
 
   final Message message;
   final bool isOwn;
+  final bool isEdited;
   final Color textColor;
 
   @override
@@ -99,6 +133,17 @@ class _TimeRow extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (isEdited && !message.isDeleted) ...[
+          Text(
+            AppStrings.chatMessageEdited,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: textColor.withValues(alpha: 0.55),
+                  fontSize: 10,
+                  fontStyle: FontStyle.italic,
+                ),
+          ),
+          const SizedBox(width: 4),
+        ],
         Text(
           message.createdAt.toMessageTime(),
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -111,6 +156,49 @@ class _TimeRow extends StatelessWidget {
           MessageStatusIcon(status: message.status),
         ],
       ],
+    );
+  }
+}
+
+class _ReactionRow extends StatelessWidget {
+  const _ReactionRow({
+    required this.reactions,
+    required this.ownUserId,
+  });
+
+  final List<Reaction> reactions;
+  final String ownUserId;
+
+  @override
+  Widget build(BuildContext context) {
+    // Group reactions by emoji and count them.
+    final grouped = <String, int>{};
+    for (final r in reactions) {
+      grouped[r.emoji] = (grouped[r.emoji] ?? 0) + 1;
+    }
+
+    return Wrap(
+      spacing: 4,
+      children: grouped.entries.map((entry) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Text(
+            entry.value > 1
+                ? '${entry.key} ${entry.value}'
+                : entry.key,
+            style: const TextStyle(fontSize: 13),
+          ),
+        );
+      }).toList(),
     );
   }
 }
