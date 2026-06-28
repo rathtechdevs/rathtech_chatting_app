@@ -11,36 +11,47 @@ import '../features/auth/presentation/screens/magic_link_sent_screen.dart';
 import '../features/auth/presentation/screens/otp_verification_screen.dart';
 import '../features/auth/presentation/screens/setup_profile_screen.dart';
 import '../features/auth/providers.dart';
+import '../features/pairing/domain/entities/pair.dart';
+import '../features/pairing/presentation/screens/enter_invite_screen.dart';
+import '../features/pairing/presentation/screens/generate_invite_screen.dart';
+import '../features/pairing/presentation/screens/pair_screen.dart';
+import '../features/pairing/providers.dart';
 import 'splash_screen.dart';
 
-// Notifies GoRouter whenever auth state changes so redirect is re-evaluated.
-class _AuthRefreshNotifier extends ChangeNotifier {
-  _AuthRefreshNotifier(Ref ref) {
-    _subscription = ref.listen<AsyncValue<AppAuthState>>(
+// Notifies GoRouter whenever auth OR pair state changes so redirect re-evaluates.
+class _RouterRefreshNotifier extends ChangeNotifier {
+  _RouterRefreshNotifier(Ref ref) {
+    _authSub = ref.listen<AsyncValue<AppAuthState>>(
       authStateProvider,
-      (_, state) => notifyListeners(),
+      (prev, next) => notifyListeners(),
+    );
+    _pairSub = ref.listen<AsyncValue<Pair?>>(
+      pairStatusProvider,
+      (prev, next) => notifyListeners(),
     );
   }
 
-  late final ProviderSubscription<AsyncValue<AppAuthState>> _subscription;
+  late final ProviderSubscription<AsyncValue<AppAuthState>> _authSub;
+  late final ProviderSubscription<AsyncValue<Pair?>> _pairSub;
 
   @override
   void dispose() {
-    _subscription.close();
+    _authSub.close();
+    _pairSub.close();
     super.dispose();
   }
 }
 
 // Routes added per milestone:
-// M1: login, otp, magic-link, setup-profile  ← current
-// M3: pair, generate-invite, enter-invite
+// M1: login, otp, magic-link, setup-profile
+// M3: pair, generate-invite, enter-invite      ← current
 // M4: chat
 // M6: image-viewer
 // M8: my-profile, partner-profile
 // M9: app-lock
 // M10: settings/*
 final routerProvider = Provider<GoRouter>((ref) {
-  final notifier = _AuthRefreshNotifier(ref);
+  final notifier = _RouterRefreshNotifier(ref);
   ref.onDispose(notifier.dispose);
 
   return GoRouter(
@@ -68,14 +79,33 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       if (authState == AppAuthState.authenticated) {
-        final isOnboarding = location == AppRoutes.splash ||
+        final pairValue = ref.read(pairStatusProvider);
+
+        // Pair status not yet resolved — hold on splash while loading.
+        if (!pairValue.hasValue) {
+          return location == AppRoutes.splash ? null : AppRoutes.splash;
+        }
+
+        final pair = pairValue.requireValue;
+
+        if (pair == null) {
+          // Unpaired: only allow pairing screens.
+          final isPairRoute = location == AppRoutes.pair ||
+              location == AppRoutes.generateInvite ||
+              location == AppRoutes.enterInvite;
+          return isPairRoute ? null : AppRoutes.pair;
+        }
+
+        // Paired: block onboarding/pairing screens, send to chat.
+        final isOnboardingOrPairRoute = location == AppRoutes.splash ||
             location == AppRoutes.login ||
             location == AppRoutes.otpVerification ||
             location == AppRoutes.magicLinkSent ||
-            location == AppRoutes.setupProfile;
-        // In M3 this will also check pair status.
-        // For M1, authenticated users land on the placeholder chat screen.
-        return isOnboarding ? AppRoutes.chat : null;
+            location == AppRoutes.setupProfile ||
+            location == AppRoutes.pair ||
+            location == AppRoutes.generateInvite ||
+            location == AppRoutes.enterInvite;
+        return isOnboardingOrPairRoute ? AppRoutes.chat : null;
       }
 
       return null;
@@ -94,7 +124,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.otpVerification,
         builder: (_, state) {
-          // Carries the PhoneNumber value object passed via context.push extra.
           final phone = state.extra! as PhoneNumber;
           return OtpVerificationScreen(phone: phone);
         },
@@ -108,14 +137,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => const SetupProfileScreen(),
       ),
 
-      // ── Milestone placeholders (replaced in M3/M4) ─────────────────────────
+      // ── Pairing routes (M3) ────────────────────────────────────────────────
       GoRoute(
         path: AppRoutes.pair,
-        builder: (_, state) => const _MilestonePlaceholder(
-          title: 'Pairing',
-          milestone: 'M3',
-        ),
+        builder: (_, state) => const PairScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.generateInvite,
+        builder: (_, state) => const GenerateInviteScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.enterInvite,
+        builder: (_, state) => const EnterInviteScreen(),
+      ),
+
+      // ── Milestone placeholder (replaced in M4) ─────────────────────────────
       GoRoute(
         path: AppRoutes.chat,
         builder: (_, state) => const _MilestonePlaceholder(
@@ -158,11 +194,11 @@ class _MilestonePlaceholder extends StatelessWidget {
             Text(
               AppStrings.appName,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.5),
-              ),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5),
+                  ),
             ),
           ],
         ),
