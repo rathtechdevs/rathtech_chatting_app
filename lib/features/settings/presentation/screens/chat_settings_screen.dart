@@ -27,23 +27,25 @@ class ChatSettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
-          RadioListTile<ThemeMode>(
-            title: const Text(AppStrings.settingsThemeSystem),
-            value: ThemeMode.system,
+          RadioGroup<ThemeMode>(
             groupValue: settings.themeMode,
             onChanged: (v) => notifier.setThemeMode(v!),
-          ),
-          RadioListTile<ThemeMode>(
-            title: const Text(AppStrings.settingsThemeLight),
-            value: ThemeMode.light,
-            groupValue: settings.themeMode,
-            onChanged: (v) => notifier.setThemeMode(v!),
-          ),
-          RadioListTile<ThemeMode>(
-            title: const Text(AppStrings.settingsThemeDark),
-            value: ThemeMode.dark,
-            groupValue: settings.themeMode,
-            onChanged: (v) => notifier.setThemeMode(v!),
+            child: const Column(
+              children: [
+                RadioListTile<ThemeMode>(
+                  title: Text(AppStrings.settingsThemeSystem),
+                  value: ThemeMode.system,
+                ),
+                RadioListTile<ThemeMode>(
+                  title: Text(AppStrings.settingsThemeLight),
+                  value: ThemeMode.light,
+                ),
+                RadioListTile<ThemeMode>(
+                  title: Text(AppStrings.settingsThemeDark),
+                  value: ThemeMode.dark,
+                ),
+              ],
+            ),
           ),
           const Divider(),
 
@@ -57,29 +59,29 @@ class ChatSettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
-          RadioListTile<int>(
-            title: const Text(AppStrings.settingsOff),
-            value: 0,
+          RadioGroup<int>(
             groupValue: settings.disappearingMessageHours,
             onChanged: (v) => notifier.setDisappearingMessageHours(v!),
-          ),
-          RadioListTile<int>(
-            title: const Text(AppStrings.settings24h),
-            value: 24,
-            groupValue: settings.disappearingMessageHours,
-            onChanged: (v) => notifier.setDisappearingMessageHours(v!),
-          ),
-          RadioListTile<int>(
-            title: const Text(AppStrings.settings7d),
-            value: 168,
-            groupValue: settings.disappearingMessageHours,
-            onChanged: (v) => notifier.setDisappearingMessageHours(v!),
-          ),
-          RadioListTile<int>(
-            title: const Text(AppStrings.settings30d),
-            value: 720,
-            groupValue: settings.disappearingMessageHours,
-            onChanged: (v) => notifier.setDisappearingMessageHours(v!),
+            child: const Column(
+              children: [
+                RadioListTile<int>(
+                  title: Text(AppStrings.settingsOff),
+                  value: 0,
+                ),
+                RadioListTile<int>(
+                  title: Text(AppStrings.settings24h),
+                  value: 24,
+                ),
+                RadioListTile<int>(
+                  title: Text(AppStrings.settings7d),
+                  value: 168,
+                ),
+                RadioListTile<int>(
+                  title: Text(AppStrings.settings30d),
+                  value: 720,
+                ),
+              ],
+            ),
           ),
         ],
       ),

@@ -3,13 +3,12 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'package:rathtech_chatting_app/core/error/exceptions.dart';
 import 'package:rathtech_chatting_app/core/error/failures.dart';
 import 'package:rathtech_chatting_app/features/profile/data/data_sources/remote/profile_remote_data_source.dart';
 import 'package:rathtech_chatting_app/features/profile/data/repositories/profile_repository_impl.dart';
 import 'package:rathtech_chatting_app/features/profile/domain/entities/user_profile.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class _MockProfileRemoteDataSource extends Mock
     implements ProfileRemoteDataSource {}
@@ -45,7 +44,7 @@ void main() {
 
     when(() => mockClient.auth).thenReturn(mockAuth);
     when(() => mockAuth.currentUser).thenReturn(
-      User(
+      const User(
         id: tUserId,
         appMetadata: {},
         userMetadata: {},

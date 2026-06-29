@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:rathtech_chatting_app/core/constants/storage_keys.dart';
 import 'package:rathtech_chatting_app/features/settings/data/settings_local_data_source.dart';
 import 'package:rathtech_chatting_app/features/settings/domain/entities/user_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('SettingsLocalDataSource', () {

@@ -133,14 +133,21 @@ class SecuritySettingsScreen extends ConsumerWidget {
       context: context,
       builder: (_) => SimpleDialog(
         title: const Text(AppStrings.appLockAutoLock),
-        children: AutoLockDuration.values.map((d) {
-          return RadioListTile<AutoLockDuration>(
-            title: Text(_durationLabel(d)),
-            value: d,
+        children: [
+          RadioGroup<AutoLockDuration>(
             groupValue: current,
             onChanged: (v) => Navigator.pop(context, v),
-          );
-        }).toList(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: AutoLockDuration.values.map((d) {
+                return RadioListTile<AutoLockDuration>(
+                  title: Text(_durationLabel(d)),
+                  value: d,
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
     if (selected == null) return;

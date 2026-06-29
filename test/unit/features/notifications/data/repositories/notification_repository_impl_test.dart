@@ -124,7 +124,7 @@ void main() {
       when(() => mockService.onForegroundMessage)
           .thenAnswer((_) => controller.stream);
 
-      final message = RemoteMessage();
+      const message = RemoteMessage();
       expect(sut.onForegroundMessage, emitsInOrder(<RemoteMessage>[message]));
       controller.add(message);
       controller.close();
