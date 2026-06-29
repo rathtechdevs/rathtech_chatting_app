@@ -88,6 +88,12 @@ final appLockSettingsProvider = Provider<AppLockSettings>((ref) {
   return ref.read(appLockLocalDataSourceProvider).readSettings();
 });
 
+// ── Biometric availability ────────────────────────────────────────────────────
+
+final biometricAvailableProvider = FutureProvider<bool>((ref) {
+  return ref.read(checkBiometricAvailabilityUseCaseProvider).execute();
+});
+
 // ── App lock status ───────────────────────────────────────────────────────────
 
 final appLockStatusProvider =

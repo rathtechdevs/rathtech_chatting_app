@@ -19,6 +19,16 @@ abstract final class StorageKeys {
   static const lockTimeoutMinutes = 'app_lock_timeout_minutes';
   static const lockBackgroundTs = 'app_lock_background_ts';
 
+  // ── Settings ───────────────────────────────────────────────────────────────
+  static const settingsThemeMode = 'settings_theme_mode';
+  static const settingsMuteNotifications = 'settings_mute_notifications';
+  static const settingsShowNotificationPreview =
+      'settings_show_notification_preview';
+  static const settingsReadReceipts = 'settings_read_receipts';
+  static const settingsTypingIndicator = 'settings_typing_indicator';
+  static const settingsDisappearingMessageHours =
+      'settings_disappearing_message_hours';
+
   // ── Pairing ────────────────────────────────────────────────────────────────
   static const currentPairId = 'current_pair_id';
   static const partnerId = 'partner_id';

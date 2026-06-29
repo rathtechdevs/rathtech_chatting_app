@@ -20,6 +20,12 @@ import '../features/pairing/presentation/screens/pair_screen.dart';
 import '../features/pairing/providers.dart';
 import '../features/profile/presentation/screens/partner_profile_screen.dart';
 import '../features/profile/presentation/screens/profile_screen.dart';
+import '../features/settings/presentation/screens/account_settings_screen.dart';
+import '../features/settings/presentation/screens/chat_settings_screen.dart';
+import '../features/settings/presentation/screens/notification_settings_screen.dart';
+import '../features/settings/presentation/screens/privacy_settings_screen.dart';
+import '../features/settings/presentation/screens/security_settings_screen.dart';
+import '../features/settings/presentation/screens/settings_screen.dart';
 import 'splash_screen.dart';
 
 // Notifies GoRouter whenever auth OR pair state changes so redirect re-evaluates.
@@ -52,7 +58,7 @@ class _RouterRefreshNotifier extends ChangeNotifier {
 // M4: chat
 // M6: image-viewer
 // M8: my-profile, partner-profile
-// M9: setup-pin                              ← lock shown as overlay in app.dart
+// M9: setup-pin (lock shown as overlay in app.dart)
 // M10: settings/*
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterRefreshNotifier(ref);
@@ -191,6 +197,32 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.appLock,
         builder: (_, _) => const SetupPinScreen(),
+      ),
+
+      // ── Settings (M10) ─────────────────────────────────────────────────────
+      GoRoute(
+        path: AppRoutes.settings,
+        builder: (_, _) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.notificationSettings,
+        builder: (_, _) => const NotificationSettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.privacySettings,
+        builder: (_, _) => const PrivacySettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.securitySettings,
+        builder: (_, _) => const SecuritySettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.chatSettings,
+        builder: (_, _) => const ChatSettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.accountSettings,
+        builder: (_, _) => const AccountSettingsScreen(),
       ),
     ],
   );

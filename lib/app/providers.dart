@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// Global theme mode — updated from settings screen (M10).
-// Defaults to ThemeMode.system on first launch.
-final themeModeProvider = StateProvider<ThemeMode>((ref) {
-  return ThemeMode.system;
+import '../features/settings/presentation/viewmodels/settings_notifier.dart';
+
+// Derives theme mode from the settings notifier so it persists across launches.
+final themeModeProvider = Provider<ThemeMode>((ref) {
+  return ref.watch(settingsNotifierProvider).themeMode;
 });

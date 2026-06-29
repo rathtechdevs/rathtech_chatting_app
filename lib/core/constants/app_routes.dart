@@ -18,4 +18,5 @@ abstract final class AppRoutes {
   static const chatSettings = '/settings/chat';
   static const accountSettings = '/settings/account';
   static const appLock = '/app-lock';
+  static const setupPin = '/setup-pin';
 }

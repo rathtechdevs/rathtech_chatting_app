@@ -135,6 +135,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           icon: const Icon(Icons.person_rounded),
           onPressed: () => context.push(AppRoutes.myProfile),
         ),
+        IconButton(
+          icon: const Icon(Icons.settings_rounded),
+          onPressed: () => context.push(AppRoutes.settings),
+        ),
       ],
     );
   }
