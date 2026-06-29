@@ -43,3 +43,16 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Release signing — never commit credentials
+android/key.properties
+*.jks
+*.keystore
+
+# iOS signing
+*.p8
+*.p12
+*.mobileprovision
+
+# Obfuscation debug symbols (generated at build time)
+/build/debug-info/

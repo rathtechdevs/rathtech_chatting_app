@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app/app.dart';
+import 'core/config/app_config.dart';
 import 'core/constants/storage_keys.dart';
 import 'core/logger/app_logger.dart';
 import 'core/notifications/notification_service_impl.dart';
@@ -55,10 +56,7 @@ Future<void> _initializeFirebase() async {
 }
 
 Future<void> _initializeSupabase() async {
-  const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-  const supabaseKey = String.fromEnvironment('SUPABASE_ANON_KEY');
-
-  if (supabaseUrl.isEmpty || supabaseKey.isEmpty) {
+  if (!AppConfig.hasSupabaseCredentials) {
     AppLogger.warning(
       'Supabase credentials not provided. '
       'Run with: --dart-define=SUPABASE_URL=<url> --dart-define=SUPABASE_ANON_KEY=<key>',
@@ -66,8 +64,8 @@ Future<void> _initializeSupabase() async {
   }
 
   await Supabase.initialize(
-    url: supabaseUrl,
-    publishableKey: supabaseKey,
+    url: AppConfig.supabaseUrl,
+    publishableKey: AppConfig.supabaseAnonKey,
   );
 
   AppLogger.info('Supabase initialized');

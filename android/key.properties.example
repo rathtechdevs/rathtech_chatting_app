@@ -1,0 +1,14 @@
+## Copy this file to android/key.properties and fill in your keystore details.
+## NEVER commit android/key.properties — it is listed in .gitignore.
+##
+## Generate a keystore:
+##   keytool -genkey -v \
+##     -keystore securechat-release.jks \
+##     -keyalg RSA -keysize 4096 -validity 10000 \
+##     -alias securechat
+##
+## Place the .jks file at the path below (relative to android/app/).
+storePassword=<your_keystore_password>
+keyPassword=<your_key_password>
+keyAlias=securechat
+storeFile=../securechat-release.jks
