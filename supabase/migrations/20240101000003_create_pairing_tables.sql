@@ -8,15 +8,18 @@ CREATE TABLE pairs (
     pending_disappearing_hours  INTEGER,
     proposed_by                 UUID REFERENCES auth.users(id),
     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT pair_no_self_join CHECK (user_a_id <> user_b_id),
-    CONSTRAINT pair_unique_users UNIQUE (
-        LEAST(user_a_id::TEXT, user_b_id::TEXT)::UUID,
-        GREATEST(user_a_id::TEXT, user_b_id::TEXT)::UUID
-    )
+    CONSTRAINT pair_no_self_join CHECK (user_a_id <> user_b_id)
 );
 
 CREATE INDEX idx_pairs_user_a ON pairs(user_a_id);
 CREATE INDEX idx_pairs_user_b ON pairs(user_b_id);
+
+-- Ensures (user_a, user_b) and (user_b, user_a) are treated as the same pair.
+-- UNIQUE constraints don't support expressions; a unique index does.
+CREATE UNIQUE INDEX idx_pair_unique_users ON pairs(
+    LEAST(user_a_id, user_b_id),
+    GREATEST(user_a_id, user_b_id)
+);
 
 ALTER TABLE pairs ENABLE ROW LEVEL SECURITY;
 
