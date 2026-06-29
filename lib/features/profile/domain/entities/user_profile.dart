@@ -14,4 +14,15 @@ class UserProfile {
   final DateTime createdAt;
 
   bool get hasAvatar => avatarUrl != null && avatarUrl!.isNotEmpty;
+
+  UserProfile copyWith({
+    String? displayName,
+    String? avatarUrl,
+  }) => UserProfile(
+    id: id,
+    displayName: displayName ?? this.displayName,
+    avatarUrl: avatarUrl ?? this.avatarUrl,
+    dateOfBirth: dateOfBirth,
+    createdAt: createdAt,
+  );
 }

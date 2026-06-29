@@ -20,7 +20,7 @@ class NotificationRemoteDataSourceImpl implements NotificationRemoteDataSource {
       await _client
           .from('user_profiles')
           .update({'fcm_token': token})
-          .eq('user_id', userId);
+          .eq('id', userId);
     } on PostgrestException catch (e) {
       throw ServerException(message: e.message);
     } catch (e) {

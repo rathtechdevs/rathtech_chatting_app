@@ -6,6 +6,9 @@ import '../../core/storage/app_database.dart';
 import '../auth/providers.dart';
 import '../media/providers.dart';
 import '../pairing/providers.dart';
+import '../profile/domain/entities/user_presence.dart';
+import '../profile/domain/entities/user_profile.dart';
+import '../profile/providers.dart' as profile_providers;
 import 'data/data_sources/local/chat_local_data_source.dart';
 import 'data/data_sources/remote/chat_remote_data_source.dart';
 import 'data/repositories/chat_repository_impl.dart';
@@ -101,6 +104,24 @@ final markAllReadUseCaseProvider = Provider<MarkAllReadUseCase>((ref) {
 final sendMediaMessageUseCaseProvider = Provider<SendMediaMessageUseCase>(
   (ref) => SendMediaMessageUseCase(ref.watch(chatRepositoryProvider)),
 );
+
+// ── Partner profile & presence (scoped to the current chat partner) ───────────
+
+final chatPartnerProfileProvider = StreamProvider<UserProfile?>((ref) {
+  final partnerId = ref.watch(chatPartnerIdProvider);
+  if (partnerId.isEmpty) return const Stream.empty();
+  return ref
+      .read(profile_providers.profileRepositoryProvider)
+      .watchPartnerProfile(partnerId);
+});
+
+final chatPartnerPresenceProvider = StreamProvider<UserPresence?>((ref) {
+  final partnerId = ref.watch(chatPartnerIdProvider);
+  if (partnerId.isEmpty) return const Stream.empty();
+  return ref
+      .read(profile_providers.profileRepositoryProvider)
+      .watchPartnerPresence(partnerId);
+});
 
 // ── View model ────────────────────────────────────────────────────────────────
 

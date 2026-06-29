@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/constants/app_routes.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/extensions/datetime_extensions.dart';
+import '../../../profile/presentation/widgets/avatar_widget.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/reaction.dart';
 import '../../providers.dart';
@@ -62,41 +65,75 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   AppBar _buildAppBar(BuildContext context, ChatState state) {
     final isTyping = state is ChatReady && state.isPartnerTyping;
+    final partnerProfile = ref.watch(chatPartnerProfileProvider).valueOrNull;
+    final presence = ref.watch(chatPartnerPresenceProvider).valueOrNull;
+    final partnerId = ref.watch(chatPartnerIdProvider);
+
+    final partnerName = partnerProfile?.displayName ?? AppStrings.appName;
+
+    String subtitleText;
+    if (isTyping) {
+      subtitleText = AppStrings.chatTyping;
+    } else if (presence?.isOnline == true) {
+      subtitleText = AppStrings.chatOnline;
+    } else if (presence != null) {
+      subtitleText =
+          '${AppStrings.chatLastSeen} ${presence.lastSeenAt.toLastSeen()}';
+    } else {
+      subtitleText = '';
+    }
+
     return AppBar(
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            AppStrings.appName,
-            style: Theme.of(context).textTheme.titleMedium,
+      leadingWidth: 56,
+      leading: GestureDetector(
+        onTap: () => context.push(
+          AppRoutes.partnerProfile,
+          extra: partnerId,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: AvatarWidget(
+            avatarUrl: partnerProfile?.avatarUrl,
+            displayName: partnerName,
+            radius: 18,
           ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: isTyping
-                ? Text(
-                    AppStrings.chatTyping,
-                    key: const ValueKey('typing'),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                  )
-                : Text(
-                    AppStrings.chatOnline,
-                    key: const ValueKey('online'),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.6),
-                        ),
-                  ),
-          ),
-        ],
+        ),
+      ),
+      title: GestureDetector(
+        onTap: () => context.push(
+          AppRoutes.partnerProfile,
+          extra: partnerId,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              partnerName,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (subtitleText.isNotEmpty)
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Text(
+                  subtitleText,
+                  key: ValueKey(subtitleText),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: isTyping || presence?.isOnline == true
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.6),
+                      ),
+                ),
+              ),
+          ],
+        ),
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.more_vert_rounded),
-          onPressed: () {},
+          icon: const Icon(Icons.person_rounded),
+          onPressed: () => context.push(AppRoutes.myProfile),
         ),
       ],
     );

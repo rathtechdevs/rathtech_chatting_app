@@ -17,6 +17,8 @@ import '../features/pairing/presentation/screens/enter_invite_screen.dart';
 import '../features/pairing/presentation/screens/generate_invite_screen.dart';
 import '../features/pairing/presentation/screens/pair_screen.dart';
 import '../features/pairing/providers.dart';
+import '../features/profile/presentation/screens/partner_profile_screen.dart';
+import '../features/profile/presentation/screens/profile_screen.dart';
 import 'splash_screen.dart';
 
 // Notifies GoRouter whenever auth OR pair state changes so redirect re-evaluates.
@@ -168,6 +170,19 @@ final routerProvider = Provider<GoRouter>((ref) {
             localPath: extra.localPath,
             heroTag: extra.heroTag,
           );
+        },
+      ),
+
+      // ── Profile (M8) ───────────────────────────────────────────────────────
+      GoRoute(
+        path: AppRoutes.myProfile,
+        builder: (_, _) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.partnerProfile,
+        builder: (_, state) {
+          final partnerId = state.extra! as String;
+          return PartnerProfileScreen(partnerId: partnerId);
         },
       ),
     ],
