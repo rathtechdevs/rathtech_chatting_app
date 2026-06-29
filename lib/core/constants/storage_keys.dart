@@ -14,8 +14,10 @@ abstract final class StorageKeys {
 
   // ── App Lock ───────────────────────────────────────────────────────────────
   static const pinHash = 'app_lock_pin_hash';
+  static const pinSalt = 'app_lock_pin_salt';
   static const lockType = 'app_lock_type';
   static const lockTimeoutMinutes = 'app_lock_timeout_minutes';
+  static const lockBackgroundTs = 'app_lock_background_ts';
 
   // ── Pairing ────────────────────────────────────────────────────────────────
   static const currentPairId = 'current_pair_id';

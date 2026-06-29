@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/constants/app_routes.dart';
+import '../features/app_lock/presentation/screens/setup_pin_screen.dart';
 import '../features/auth/domain/entities/auth_session.dart';
 import '../features/auth/domain/value_objects/phone_number.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
@@ -47,11 +48,11 @@ class _RouterRefreshNotifier extends ChangeNotifier {
 
 // Routes added per milestone:
 // M1: login, otp, magic-link, setup-profile
-// M3: pair, generate-invite, enter-invite      ← current
+// M3: pair, generate-invite, enter-invite
 // M4: chat
 // M6: image-viewer
 // M8: my-profile, partner-profile
-// M9: app-lock
+// M9: setup-pin                              ← lock shown as overlay in app.dart
 // M10: settings/*
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterRefreshNotifier(ref);
@@ -184,6 +185,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           final partnerId = state.extra! as String;
           return PartnerProfileScreen(partnerId: partnerId);
         },
+      ),
+
+      // ── App lock (M9) ──────────────────────────────────────────────────────
+      GoRoute(
+        path: AppRoutes.appLock,
+        builder: (_, _) => const SetupPinScreen(),
       ),
     ],
   );
