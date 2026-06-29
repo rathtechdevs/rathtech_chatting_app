@@ -23,7 +23,7 @@ void main() {
   const tPairId = 'pair-abc';
   const tPartnerId = 'user-partner';
 
-  final tBundle = KeyBundle(
+  const tBundle = KeyBundle(
     userId: tPartnerId,
     identityKey: 'ik',
     identitySigningKey: 'isk',

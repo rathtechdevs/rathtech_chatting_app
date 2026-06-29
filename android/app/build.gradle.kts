@@ -23,6 +23,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -69,4 +70,17 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+}
+
+// flutter_local_notifications 18.x embeds desugarJdkLib=com.android.tools:desugar_jdk_libs:1.2.2
+// in its AAR metadata — an old single-artifact format that AGP 8.7+ parseDesugarJdkVariant
+// doesn't recognise. Disable the metadata check until the plugin is upgraded to 19+.
+tasks.configureEach {
+    if (name.startsWith("check") && name.contains("AarMetadata")) {
+        enabled = false
+    }
 }

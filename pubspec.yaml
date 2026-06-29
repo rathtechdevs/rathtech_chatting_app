@@ -50,7 +50,7 @@ dependencies:
   flutter_image_compress: ^2.3.0
 
   # Audio recording & playback
-  record: ^5.2.0
+  record: ^6.0.0
   just_audio: ^0.9.36
 
   # Biometric / PIN app lock
