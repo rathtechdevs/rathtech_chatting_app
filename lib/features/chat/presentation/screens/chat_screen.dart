@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/extensions/datetime_extensions.dart';
@@ -150,12 +151,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Widget _buildInput(ChatState state) {
     final isSending = state is ChatReady && state.isSending;
+    final isRecording = state is ChatReady && state.isRecording;
+    final recordingDuration =
+        state is ChatReady ? state.recordingDuration : Duration.zero;
+    final vm = ref.read(chatViewModelProvider.notifier);
+
     return ChatInputBar(
       isSending: isSending,
-      onSend: (text) =>
-          ref.read(chatViewModelProvider.notifier).sendMessage(text),
-      onTypingChanged: (isTyping) =>
-          ref.read(chatViewModelProvider.notifier).onTypingChanged(isTyping),
+      isRecording: isRecording,
+      recordingDuration: recordingDuration,
+      onSend: (text) => vm.sendMessage(text),
+      onTypingChanged: (isTyping) => vm.onTypingChanged(isTyping),
+      onAttachImage: () => _pickImage(context),
+      onVoiceRecordStart: vm.startRecording,
+      onVoiceRecordEnd: vm.stopRecordingAndSend,
+      onVoiceRecordCancel: vm.cancelRecording,
+    );
+  }
+
+  Future<void> _pickImage(BuildContext context) async {
+    final picker = ImagePicker();
+    final source = await _showImageSourceSheet(context);
+    if (source == null) return;
+
+    final file = await picker.pickImage(source: source, imageQuality: 90);
+    if (file == null) return;
+
+    if (context.mounted) {
+      ref.read(chatViewModelProvider.notifier).sendImageMessage(file.path);
+    }
+  }
+
+  Future<ImageSource?> _showImageSourceSheet(BuildContext context) async {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded),
+              title: const Text(AppStrings.chatSendImage),
+              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded),
+              title: const Text('Camera'),
+              onTap: () => Navigator.of(context).pop(ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -239,7 +285,6 @@ class _MessageList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // +1 for loading spinner, +1 for typing indicator if active.
     final extraTop = isLoadingMore ? 1 : 0;
     final extraBottom = isPartnerTyping ? 1 : 0;
     final itemCount = messages.length + extraTop + extraBottom;
@@ -249,7 +294,6 @@ class _MessageList extends StatelessWidget {
       padding: const EdgeInsets.only(top: 8, bottom: 8),
       itemCount: itemCount,
       itemBuilder: (context, index) {
-        // Top loading spinner
         if (index == 0 && isLoadingMore) {
           return const Padding(
             padding: EdgeInsets.all(12),
@@ -257,7 +301,6 @@ class _MessageList extends StatelessWidget {
           );
         }
 
-        // Bottom typing indicator
         if (index == itemCount - 1 && isPartnerTyping) {
           return const TypingIndicator();
         }

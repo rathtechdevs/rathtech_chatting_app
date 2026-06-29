@@ -20,6 +20,16 @@ abstract interface class ChatRemoteDataSource {
     required EncryptedPayload payload,
   });
 
+  Future<Map<String, dynamic>> insertMediaMessage({
+    required String id,
+    required String pairId,
+    required String senderId,
+    required String contentType,
+    required EncryptedPayload payload,
+    required String storagePath,
+    int? durationMs,
+  });
+
   Future<List<Map<String, dynamic>>> fetchMessagesBefore({
     required String pairId,
     required DateTime before,
@@ -106,6 +116,40 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
       return rows.first;
     } on PostgrestException catch (e) {
       AppLogger.error('insertMessage failed', e);
+      throw ServerException(
+        message: e.message,
+        statusCode: int.tryParse(e.code ?? ''),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> insertMediaMessage({
+    required String id,
+    required String pairId,
+    required String senderId,
+    required String contentType,
+    required EncryptedPayload payload,
+    required String storagePath,
+    int? durationMs,
+  }) async {
+    try {
+      final data = {
+        'id': id,
+        'pair_id': pairId,
+        'sender_id': senderId,
+        'message_type': contentType,
+        'ciphertext': payload.ciphertext,
+        'signal_header': payload.header,
+        'message_index': payload.messageIndex,
+        'signal_type': payload.messageType,
+        'media_storage_path': storagePath,
+        'media_duration_ms': ?durationMs,
+      };
+      final rows = await _client.from('messages').insert(data).select();
+      return rows.first;
+    } on PostgrestException catch (e) {
+      AppLogger.error('insertMediaMessage failed', e);
       throw ServerException(
         message: e.message,
         statusCode: int.tryParse(e.code ?? ''),

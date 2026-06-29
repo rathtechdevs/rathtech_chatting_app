@@ -25,6 +25,9 @@ class Message {
     required this.status,
     required this.createdAt,
     this.text,
+    this.mediaLocalPath,
+    this.mediaStorageUrl,
+    this.mediaDurationMs,
     this.replyToId,
     this.isDeleted = false,
   });
@@ -34,6 +37,9 @@ class Message {
   final String senderId;
   final String contentType; // 'text' | 'image' | 'voice' | 'system'
   final String? text;
+  final String? mediaLocalPath;
+  final String? mediaStorageUrl;
+  final int? mediaDurationMs;
   final MessageStatus status;
   final DateTime createdAt;
   final String? replyToId;

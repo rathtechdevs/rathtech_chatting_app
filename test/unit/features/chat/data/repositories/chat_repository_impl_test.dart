@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:mocktail/mocktail.dart';
@@ -5,13 +8,16 @@ import 'package:rathtech_chatting_app/core/encryption/encryption_service.dart';
 import 'package:rathtech_chatting_app/core/encryption/models/encrypted_payload.dart';
 import 'package:rathtech_chatting_app/core/encryption/models/key_bundle.dart';
 import 'package:rathtech_chatting_app/core/encryption/remote/key_bundle_remote_data_source.dart';
+import 'package:rathtech_chatting_app/core/error/exceptions.dart';
 import 'package:rathtech_chatting_app/core/error/failures.dart';
+import 'package:rathtech_chatting_app/core/media/media_cache_service.dart';
 import 'package:rathtech_chatting_app/core/storage/app_database.dart';
 import 'package:rathtech_chatting_app/features/chat/data/data_sources/local/chat_local_data_source.dart';
 import 'package:rathtech_chatting_app/features/chat/data/data_sources/remote/chat_remote_data_source.dart';
 import 'package:rathtech_chatting_app/features/chat/data/repositories/chat_repository_impl.dart';
 import 'package:rathtech_chatting_app/features/chat/domain/entities/message.dart';
 import 'package:rathtech_chatting_app/features/chat/domain/repositories/chat_repository.dart';
+import 'package:rathtech_chatting_app/features/media/data/data_sources/media_remote_data_source.dart';
 
 class _MockChatRemoteDataSource extends Mock implements ChatRemoteDataSource {}
 
@@ -22,6 +28,10 @@ class _MockEncryptionService extends Mock implements EncryptionService {}
 class _MockKeyBundleRemoteDataSource extends Mock
     implements KeyBundleRemoteDataSource {}
 
+class _MockMediaRemoteDataSource extends Mock implements MediaRemoteDataSource {}
+
+class _MockMediaCacheService extends Mock implements MediaCacheService {}
+
 class _FakeEncryptedPayload extends Fake implements EncryptedPayload {}
 
 class _FakeLocalMessagesCompanion extends Fake implements LocalMessagesCompanion {}
@@ -30,11 +40,15 @@ class _FakeKeyBundle extends Fake implements KeyBundle {}
 
 class _FakeSendMessageParams extends Fake implements SendMessageParams {}
 
+class _FakeSendMediaParams extends Fake implements SendMediaParams {}
+
 void main() {
   late _MockChatRemoteDataSource remote;
   late _MockChatLocalDataSource local;
   late _MockEncryptionService encryption;
   late _MockKeyBundleRemoteDataSource keyBundle;
+  late _MockMediaRemoteDataSource mediaRemote;
+  late _MockMediaCacheService mediaCache;
   late ChatRepositoryImpl repository;
 
   const tPairId = 'pair-id';
@@ -67,17 +81,23 @@ void main() {
     local = _MockChatLocalDataSource();
     encryption = _MockEncryptionService();
     keyBundle = _MockKeyBundleRemoteDataSource();
+    mediaRemote = _MockMediaRemoteDataSource();
+    mediaCache = _MockMediaCacheService();
 
     registerFallbackValue(_FakeEncryptedPayload());
     registerFallbackValue(_FakeLocalMessagesCompanion());
     registerFallbackValue(_FakeKeyBundle());
     registerFallbackValue(_FakeSendMessageParams());
+    registerFallbackValue(_FakeSendMediaParams());
+    registerFallbackValue(Uint8List(0));
 
     repository = ChatRepositoryImpl(
       remote: remote,
       local: local,
       encryption: encryption,
       keyBundleRemote: keyBundle,
+      mediaRemote: mediaRemote,
+      mediaCache: mediaCache,
       ownUserId: tSenderId,
     );
   });
@@ -215,6 +235,217 @@ void main() {
       // After reversal: oldest first
       expect(messages.first.id, 'msg-1');
       expect(messages.last.id, 'msg-2');
+    });
+  });
+
+  group('sendMediaMessage', () {
+    late File tMediaFile;
+
+    final tKey = Uint8List.fromList(List.generate(32, (i) => i));
+    final tIv = Uint8List.fromList(List.generate(12, (i) => i + 100));
+    final tEncryptedData = Uint8List.fromList([0xDE, 0xAD, 0xBE, 0xEF]);
+
+    final tMediaRow = {
+      'id': 'media-id',
+      'pair_id': tPairId,
+      'sender_id': tSenderId,
+      'message_type': 'image',
+      'ciphertext': 'ciphertext',
+      'signal_header': 'header',
+      'message_index': 0,
+      'signal_type': 'prekey',
+      'status': 'sent',
+      'sent_at': DateTime(2024).toIso8601String(),
+      'media_storage_path': '$tPairId/media-id.bin',
+    };
+
+    setUp(() async {
+      tMediaFile = File(
+        '${Directory.systemTemp.path}/test_m6_${DateTime.now().microsecondsSinceEpoch}.bin',
+      );
+      await tMediaFile.writeAsBytes([0xFF, 0xD8, 0xFF, 0xE0]);
+    });
+
+    tearDown(() async {
+      if (tMediaFile.existsSync()) await tMediaFile.delete();
+    });
+
+    void stubEncryptMedia() {
+      when(() => encryption.encryptMedia(any())).thenAnswer(
+        (_) async => Right((
+          encryptedData: tEncryptedData,
+          key: tKey,
+          iv: tIv,
+        )),
+      );
+    }
+
+    test(
+        'encrypts media, uploads to storage, inserts message row, '
+        'stores locally, returns Right(Message)', () async {
+      when(() => encryption.hasSession(tPairId)).thenReturn(true);
+      stubEncryptMedia();
+      when(() => encryption.encrypt(
+            pairId: tPairId,
+            plaintext: any(named: 'plaintext'),
+          )).thenAnswer((_) async => const Right(tPayload));
+      when(() => mediaRemote.upload(
+            storagePath: any(named: 'storagePath'),
+            bytes: any(named: 'bytes'),
+          )).thenAnswer((_) async {});
+      when(() => remote.insertMediaMessage(
+            id: any(named: 'id'),
+            pairId: tPairId,
+            senderId: tSenderId,
+            contentType: 'image',
+            payload: any(named: 'payload'),
+            storagePath: any(named: 'storagePath'),
+          )).thenAnswer((_) async => tMediaRow);
+      when(() => local.upsertMessage(any())).thenAnswer((_) async {});
+
+      final result = await repository.sendMediaMessage(SendMediaParams(
+        pairId: tPairId,
+        senderId: tSenderId,
+        partnerId: tPartnerId,
+        contentType: 'image',
+        localFilePath: tMediaFile.path,
+      ));
+
+      expect(result.isRight(), isTrue);
+      final msg = result.getOrElse((_) => throw Exception());
+      expect(msg.contentType, 'image');
+      expect(msg.status, MessageStatus.sent);
+      expect(msg.mediaLocalPath, tMediaFile.path);
+
+      verify(() => encryption.encryptMedia(any())).called(1);
+      verify(() => mediaRemote.upload(
+            storagePath: any(named: 'storagePath'),
+            bytes: any(named: 'bytes'),
+          )).called(1);
+      verify(() => remote.insertMediaMessage(
+            id: any(named: 'id'),
+            pairId: tPairId,
+            senderId: tSenderId,
+            contentType: 'image',
+            payload: any(named: 'payload'),
+            storagePath: any(named: 'storagePath'),
+          )).called(1);
+      verify(() => local.upsertMessage(any())).called(1);
+    });
+
+    test('returns Left when media encryption fails', () async {
+      when(() => encryption.hasSession(tPairId)).thenReturn(true);
+      when(() => encryption.encryptMedia(any())).thenAnswer(
+        (_) async => const Left(EncryptionFailure.decryptionFailed()),
+      );
+
+      final result = await repository.sendMediaMessage(SendMediaParams(
+        pairId: tPairId,
+        senderId: tSenderId,
+        partnerId: tPartnerId,
+        contentType: 'image',
+        localFilePath: tMediaFile.path,
+      ));
+
+      expect(result.isLeft(), isTrue);
+      verifyNever(() => mediaRemote.upload(
+            storagePath: any(named: 'storagePath'),
+            bytes: any(named: 'bytes'),
+          ));
+    });
+
+    test('returns Left(ServerFailure) when storage upload throws', () async {
+      when(() => encryption.hasSession(tPairId)).thenReturn(true);
+      stubEncryptMedia();
+      when(() => encryption.encrypt(
+            pairId: tPairId,
+            plaintext: any(named: 'plaintext'),
+          )).thenAnswer((_) async => const Right(tPayload));
+      when(() => mediaRemote.upload(
+            storagePath: any(named: 'storagePath'),
+            bytes: any(named: 'bytes'),
+          )).thenThrow(const ServerException(message: 'upload failed'));
+
+      final result = await repository.sendMediaMessage(SendMediaParams(
+        pairId: tPairId,
+        senderId: tSenderId,
+        partnerId: tPartnerId,
+        contentType: 'image',
+        localFilePath: tMediaFile.path,
+      ));
+
+      expect(result.isLeft(), isTrue);
+      verifyNever(() => remote.insertMediaMessage(
+            id: any(named: 'id'),
+            pairId: any(named: 'pairId'),
+            senderId: any(named: 'senderId'),
+            contentType: any(named: 'contentType'),
+            payload: any(named: 'payload'),
+            storagePath: any(named: 'storagePath'),
+          ));
+    });
+
+    test('passes durationMs and returns voice message on success', () async {
+      late File voiceFile;
+      voiceFile = File(
+        '${Directory.systemTemp.path}/test_voice_${DateTime.now().microsecondsSinceEpoch}.m4a',
+      );
+      await voiceFile.writeAsBytes([0x00, 0x00, 0x00, 0x20]);
+      addTearDown(() async {
+        if (voiceFile.existsSync()) await voiceFile.delete();
+      });
+
+      const tDurationMs = 5000;
+      final tVoiceRow = {
+        ...tMediaRow,
+        'message_type': 'voice',
+        'media_duration_ms': tDurationMs,
+      };
+
+      when(() => encryption.hasSession(tPairId)).thenReturn(true);
+      stubEncryptMedia();
+      when(() => encryption.encrypt(
+            pairId: tPairId,
+            plaintext: any(named: 'plaintext'),
+          )).thenAnswer((_) async => const Right(tPayload));
+      when(() => mediaRemote.upload(
+            storagePath: any(named: 'storagePath'),
+            bytes: any(named: 'bytes'),
+          )).thenAnswer((_) async {});
+      when(() => remote.insertMediaMessage(
+            id: any(named: 'id'),
+            pairId: tPairId,
+            senderId: tSenderId,
+            contentType: 'voice',
+            payload: any(named: 'payload'),
+            storagePath: any(named: 'storagePath'),
+            durationMs: tDurationMs,
+          )).thenAnswer((_) async => tVoiceRow);
+      when(() => local.upsertMessage(any())).thenAnswer((_) async {});
+
+      final result = await repository.sendMediaMessage(SendMediaParams(
+        pairId: tPairId,
+        senderId: tSenderId,
+        partnerId: tPartnerId,
+        contentType: 'voice',
+        localFilePath: voiceFile.path,
+        durationMs: tDurationMs,
+      ));
+
+      expect(result.isRight(), isTrue);
+      final msg = result.getOrElse((_) => throw Exception());
+      expect(msg.contentType, 'voice');
+      expect(msg.mediaDurationMs, tDurationMs);
+
+      verify(() => remote.insertMediaMessage(
+            id: any(named: 'id'),
+            pairId: tPairId,
+            senderId: tSenderId,
+            contentType: 'voice',
+            payload: any(named: 'payload'),
+            storagePath: any(named: 'storagePath'),
+            durationMs: tDurationMs,
+          )).called(1);
     });
   });
 }

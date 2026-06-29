@@ -1,5 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:fpdart/fpdart.dart';
 
 import '../../../../core/encryption/encryption_service.dart';
@@ -8,7 +13,9 @@ import '../../../../core/encryption/remote/key_bundle_remote_data_source.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/logger/app_logger.dart';
+import '../../../../core/media/media_cache_service.dart';
 import '../../../../core/storage/app_database.dart';
+import '../../../../features/media/data/data_sources/media_remote_data_source.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/reaction.dart';
 import '../../domain/repositories/chat_repository.dart';
@@ -24,6 +31,8 @@ class ChatRepositoryImpl implements ChatRepository {
     required this.local,
     required this.encryption,
     required this.keyBundleRemote,
+    required this.mediaRemote,
+    required this.mediaCache,
     required this.ownUserId,
   });
 
@@ -31,6 +40,8 @@ class ChatRepositoryImpl implements ChatRepository {
   final ChatLocalDataSource local;
   final EncryptionService encryption;
   final KeyBundleRemoteDataSource keyBundleRemote;
+  final MediaRemoteDataSource mediaRemote;
+  final MediaCacheService mediaCache;
   final String ownUserId;
 
   // Subscriptions keyed by '<type>_<pairId>' to allow multiple per pair.
@@ -115,37 +126,70 @@ class ChatRepositoryImpl implements ChatRepository {
 
       for (final row in rows) {
         try {
-          final payload = _payloadFromRow(row);
-          final decryptResult = await encryption.decrypt(
-            pairId: params.pairId,
-            payload: payload,
-          );
-          final text = decryptResult.getOrElse((_) => '[Decryption failed]');
           final id = row['id'] as String;
           final senderId = row['sender_id'] as String;
+          final contentType = row['message_type'] as String? ?? 'text';
           final sentAt = DateTime.parse(row['sent_at'] as String);
 
-          await local.upsertMessage(MessageDto.toCompanion(
-            id: id,
-            pairId: params.pairId,
-            senderId: senderId,
-            contentType: 'text',
-            status: 'delivered',
-            createdAt: sentAt,
-            decryptedText: text,
-          ));
+          if (contentType == 'text') {
+            final payload = _payloadFromRow(row);
+            final decryptResult = await encryption.decrypt(
+              pairId: params.pairId,
+              payload: payload,
+            );
+            final text = decryptResult.getOrElse((_) => '[Decryption failed]');
 
-          messages.add(Message(
-            id: id,
-            pairId: params.pairId,
-            senderId: senderId,
-            contentType: 'text',
-            text: text,
-            status: MessageStatus.delivered,
-            createdAt: sentAt,
-          ));
+            await local.upsertMessage(MessageDto.toCompanion(
+              id: id,
+              pairId: params.pairId,
+              senderId: senderId,
+              contentType: 'text',
+              status: 'delivered',
+              createdAt: sentAt,
+              decryptedText: text,
+            ));
+
+            messages.add(Message(
+              id: id,
+              pairId: params.pairId,
+              senderId: senderId,
+              contentType: 'text',
+              text: text,
+              status: MessageStatus.delivered,
+              createdAt: sentAt,
+            ));
+          } else {
+            // Media message — store metadata without re-downloading.
+            // If already cached locally (from Realtime), the upsert
+            // uses Value.absent() for paths so the cached version is preserved.
+            final durationMs = row['media_duration_ms'] as int?;
+            final storagePath = row['media_storage_path'] as String?;
+
+            await local.upsertMessage(MessageDto.toCompanion(
+              id: id,
+              pairId: params.pairId,
+              senderId: senderId,
+              contentType: contentType,
+              status: 'delivered',
+              createdAt: sentAt,
+              decryptedText: durationMs?.toString(),
+              mediaStorageUrl: storagePath,
+              // mediaLocalPath intentionally absent → preserves cached value
+            ));
+
+            messages.add(Message(
+              id: id,
+              pairId: params.pairId,
+              senderId: senderId,
+              contentType: contentType,
+              mediaDurationMs: durationMs,
+              mediaStorageUrl: storagePath,
+              status: MessageStatus.delivered,
+              createdAt: sentAt,
+            ));
+          }
         } catch (e, stack) {
-          AppLogger.error('loadMoreMessages: failed to decrypt row', e, stack);
+          AppLogger.error('loadMoreMessages: failed to process row', e, stack);
         }
       }
 
@@ -170,26 +214,32 @@ class ChatRepositoryImpl implements ChatRepository {
         final senderId = row['sender_id'] as String;
         if (senderId == ownUserId) return; // Already stored locally on send.
         try {
-          final payload = _payloadFromRow(row);
-          final decryptResult = await encryption.decrypt(
-            pairId: pairId,
-            payload: payload,
-          );
-          final text = decryptResult.getOrElse((_) => '[Decryption failed]');
+          final contentType = row['message_type'] as String? ?? 'text';
           final id = row['id'] as String;
           final sentAt = DateTime.parse(row['sent_at'] as String);
 
-          await local.upsertMessage(MessageDto.toCompanion(
-            id: id,
-            pairId: pairId,
-            senderId: senderId,
-            contentType: 'text',
-            status: 'delivered',
-            createdAt: sentAt,
-            decryptedText: text,
-          ));
+          if (contentType == 'text') {
+            final payload = _payloadFromRow(row);
+            final decryptResult = await encryption.decrypt(
+              pairId: pairId,
+              payload: payload,
+            );
+            final text = decryptResult.getOrElse((_) => '[Decryption failed]');
 
-          await remote.markDelivered(id);
+            await local.upsertMessage(MessageDto.toCompanion(
+              id: id,
+              pairId: pairId,
+              senderId: senderId,
+              contentType: 'text',
+              status: 'delivered',
+              createdAt: sentAt,
+              decryptedText: text,
+            ));
+
+            await remote.markDelivered(id);
+          } else {
+            await _processIncomingMediaMessage(pairId: pairId, row: row);
+          }
         } catch (e, stack) {
           AppLogger.error('Realtime: failed to process new message', e, stack);
         }
@@ -220,7 +270,7 @@ class ChatRepositoryImpl implements ChatRepository {
               isDeleted: true,
             ));
           } else if (editedAt != null) {
-            // Re-decrypt the edited ciphertext.
+            // Re-decrypt the edited ciphertext (text messages only).
             try {
               final payload = _payloadFromRow(row);
               final decryptResult = await encryption.decrypt(
@@ -311,8 +361,6 @@ class ChatRepositoryImpl implements ChatRepository {
           );
           await local.updateDecryptedText(params.messageId, params.newText);
 
-          // Return an updated message; the Drift stream will emit the updated row
-          // but we return immediately so the ViewModel can track the edit.
           return Right(Message(
             id: params.messageId,
             pairId: params.pairId,
@@ -337,7 +385,6 @@ class ChatRepositoryImpl implements ChatRepository {
   Future<Either<Failure, void>> deleteMessage(String messageId) async {
     try {
       await remote.deleteMessage(messageId);
-      // Local update will arrive via the Realtime UPDATE subscription.
       return const Right(null);
     } on ServerException catch (e) {
       AppLogger.error('deleteMessage server error', e);
@@ -392,7 +439,6 @@ class ChatRepositoryImpl implements ChatRepository {
   Future<Either<Failure, void>> markAllRead(String pairId) async {
     try {
       await remote.markAllRead(pairId: pairId, readerId: ownUserId);
-      // Also update local DB so the UI reflects read status immediately.
       await (_updateLocalStatusBatch(pairId));
       return const Right(null);
     } catch (e, stack) {
@@ -425,6 +471,109 @@ class ChatRepositoryImpl implements ChatRepository {
   @override
   Stream<bool> watchTyping(String pairId) => remote.typingEvents(pairId);
 
+  // ── M6: Media messages ────────────────────────────────────────────────────
+
+  @override
+  Future<Either<Failure, Message>> sendMediaMessage(
+    SendMediaParams params,
+  ) async {
+    try {
+      await _ensureSession(params.pairId, params.partnerId);
+
+      // Read and (for images) compress the media file.
+      Uint8List mediaBytes = await File(params.localFilePath).readAsBytes();
+      if (params.contentType == 'image') {
+        try {
+          final compressed = await FlutterImageCompress.compressWithList(
+            mediaBytes,
+            quality: 80,
+            minWidth: 1080,
+          );
+          mediaBytes = compressed;
+        } catch (e) {
+          AppLogger.warning('Image compression failed, using original: $e');
+        }
+      }
+
+      // AES-256-GCM encrypt the media bytes.
+      final encryptMediaResult = await encryption.encryptMedia(mediaBytes);
+      return await encryptMediaResult.fold(
+        Left.new,
+        (encrypted) async {
+          // Encode key + IV as a dot-separated base64 string and encrypt
+          // it using the Signal Double Ratchet, so the partner can retrieve
+          // the media key without it ever being stored in plaintext.
+          final keyString =
+              '${base64.encode(encrypted.key)}.${base64.encode(encrypted.iv)}';
+          final payloadResult = await encryption.encrypt(
+            pairId: params.pairId,
+            plaintext: keyString,
+          );
+
+          return payloadResult.fold(
+            Left.new,
+            (payload) async {
+              // Pre-generate a UUID so the storage path and message ID match.
+              final localId = _generateUuid();
+              final storagePath = '${params.pairId}/$localId.bin';
+
+              // Upload first — if it fails, no message row is inserted.
+              await mediaRemote.upload(
+                storagePath: storagePath,
+                bytes: encrypted.encryptedData,
+              );
+
+              // Insert the message row with the pre-generated ID.
+              final row = await remote.insertMediaMessage(
+                id: localId,
+                pairId: params.pairId,
+                senderId: params.senderId,
+                contentType: params.contentType,
+                payload: payload,
+                storagePath: storagePath,
+                durationMs: params.durationMs,
+              );
+
+              final sentAt = DateTime.parse(row['sent_at'] as String);
+
+              // Store locally with the original file as the local path
+              // (sender already has the file; no need to decrypt it back).
+              await local.upsertMessage(MessageDto.toCompanion(
+                id: localId,
+                pairId: params.pairId,
+                senderId: params.senderId,
+                contentType: params.contentType,
+                status: 'sent',
+                createdAt: sentAt,
+                decryptedText: params.durationMs?.toString(),
+                mediaLocalPath: params.localFilePath,
+                mediaStorageUrl: storagePath,
+              ));
+
+              return Right(Message(
+                id: localId,
+                pairId: params.pairId,
+                senderId: params.senderId,
+                contentType: params.contentType,
+                mediaDurationMs: params.durationMs,
+                mediaLocalPath: params.localFilePath,
+                mediaStorageUrl: storagePath,
+                status: MessageStatus.sent,
+                createdAt: sentAt,
+              ));
+            },
+          );
+        },
+      );
+    } on ServerException catch (e) {
+      AppLogger.error('sendMediaMessage server error', e);
+      return Left(ServerFailure.server(e.message));
+    } catch (e, stack) {
+      AppLogger.error('sendMediaMessage unexpected error', e, stack);
+      return const Left(UnknownFailure());
+    }
+  }
+
   // ── Dispose ───────────────────────────────────────────────────────────────
 
   Future<void> dispose() async {
@@ -432,7 +581,6 @@ class ChatRepositoryImpl implements ChatRepository {
     for (final key in keys) {
       await _subs.remove(key)?.cancel();
     }
-    // Remove all channels — extract unique pairIds from keys.
     final pairIds = keys
         .map((k) => k.split('_').skip(1).join('_'))
         .toSet();
@@ -457,7 +605,6 @@ class ChatRepositoryImpl implements ChatRepository {
     );
   }
 
-  // Marks all partner messages in local DB as 'read' (best-effort, no rethrow).
   Future<void> _updateLocalStatusBatch(String pairId) async {
     try {
       final rows = await local.getMessagesBefore(
@@ -476,6 +623,93 @@ class ChatRepositoryImpl implements ChatRepository {
     }
   }
 
+  Future<void> _processIncomingMediaMessage({
+    required String pairId,
+    required Map<String, dynamic> row,
+  }) async {
+    final id = row['id'] as String;
+    final senderId = row['sender_id'] as String;
+    final contentType = row['message_type'] as String;
+    final sentAt = DateTime.parse(row['sent_at'] as String);
+    final storagePath = row['media_storage_path'] as String? ?? '';
+    final durationMs = row['media_duration_ms'] as int?;
+
+    if (storagePath.isEmpty) {
+      AppLogger.warning('Received media message $id with no storage path');
+      return;
+    }
+
+    // Decrypt the media key string via Signal.
+    final payload = _payloadFromRow(row);
+    final decryptResult = await encryption.decrypt(
+      pairId: pairId,
+      payload: payload,
+    );
+    if (decryptResult.isLeft()) {
+      AppLogger.error('Failed to decrypt media key for message $id');
+      return;
+    }
+    final keyString = decryptResult.getOrElse((_) => '');
+
+    final keyParts = keyString.split('.');
+    if (keyParts.length != 2) {
+      AppLogger.error('Invalid media key format for message $id');
+      return;
+    }
+
+    try {
+      final key = Uint8List.fromList(base64.decode(keyParts[0]));
+      final iv = Uint8List.fromList(base64.decode(keyParts[1]));
+
+      final encryptedBytes = await mediaRemote.download(storagePath);
+
+      final decryptMediaResult = await encryption.decryptMedia(
+        encryptedData: encryptedBytes,
+        key: key,
+        iv: iv,
+      );
+
+      final plainBytes = decryptMediaResult.getOrElse((_) => Uint8List(0));
+      if (plainBytes.isEmpty) {
+        AppLogger.error('Media decryption returned empty bytes for $id');
+        return;
+      }
+
+      final localPath = await mediaCache.save(
+        messageId: id,
+        contentType: contentType,
+        bytes: plainBytes,
+      );
+
+      await local.upsertMessage(MessageDto.toCompanion(
+        id: id,
+        pairId: pairId,
+        senderId: senderId,
+        contentType: contentType,
+        status: 'delivered',
+        createdAt: sentAt,
+        decryptedText: durationMs?.toString(),
+        mediaLocalPath: localPath,
+        mediaStorageUrl: storagePath,
+      ));
+
+      await remote.markDelivered(id);
+    } catch (e, stack) {
+      AppLogger.error('Failed to download/decrypt media $id', e, stack);
+      // Store without local path so a placeholder is shown.
+      await local.upsertMessage(MessageDto.toCompanion(
+        id: id,
+        pairId: pairId,
+        senderId: senderId,
+        contentType: contentType,
+        status: 'delivered',
+        createdAt: sentAt,
+        decryptedText: durationMs?.toString(),
+        mediaStorageUrl: storagePath,
+      ));
+    }
+  }
+
   static EncryptedPayload _payloadFromRow(Map<String, dynamic> row) {
     return EncryptedPayload(
       ciphertext: row['ciphertext'] as String,
@@ -483,5 +717,16 @@ class ChatRepositoryImpl implements ChatRepository {
       messageIndex: row['message_index'] as int,
       messageType: row['signal_type'] as String,
     );
+  }
+
+  // RFC 4122 version-4 UUID generated from cryptographic random bytes.
+  static String _generateUuid() {
+    final rng = Random.secure();
+    final b = List<int>.generate(16, (_) => rng.nextInt(256));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+    return '${h.substring(0, 8)}-${h.substring(8, 12)}-'
+        '${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
   }
 }

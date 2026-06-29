@@ -5,7 +5,9 @@ import '../../../../core/extensions/datetime_extensions.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/reaction.dart';
+import 'image_message_bubble.dart';
 import 'message_status_icon.dart';
+import 'voice_message_bubble.dart';
 
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
@@ -39,6 +41,87 @@ class MessageBubble extends StatelessWidget {
             ? AppColors.receivedBubbleTextDark
             : AppColors.receivedBubbleTextLight);
 
+    // Media messages use their own layout; route by contentType.
+    if (message.contentType == 'image' && !message.isDeleted) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment:
+            isOwn ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          ImageMessageBubble(
+            message: message,
+            isOwn: isOwn,
+            bubbleColor: bubbleColor,
+            onLongPress: onLongPress,
+          ),
+          if (reactions.isNotEmpty)
+            Padding(
+              padding:
+                  EdgeInsets.only(left: isOwn ? 0 : 24, right: isOwn ? 24 : 0),
+              child: _ReactionRow(reactions: reactions, ownUserId: ownUserId),
+            ),
+        ],
+      );
+    }
+
+    if (message.contentType == 'voice' && !message.isDeleted) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        child: Align(
+          alignment: isOwn ? Alignment.centerRight : Alignment.centerLeft,
+          child: Column(
+            crossAxisAlignment:
+                isOwn ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: bubbleColor,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(18),
+                    topRight: const Radius.circular(18),
+                    bottomLeft: Radius.circular(isOwn ? 18 : 4),
+                    bottomRight: Radius.circular(isOwn ? 4 : 18),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    VoiceMessageBubble(
+                      message: message,
+                      isOwn: isOwn,
+                      bubbleColor: bubbleColor,
+                      textColor: textColor,
+                      onLongPress: onLongPress,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12, bottom: 6),
+                      child: _TimeRow(
+                        message: message,
+                        isOwn: isOwn,
+                        isEdited: false,
+                        textColor: textColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (reactions.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: _ReactionRow(
+                    reactions: reactions,
+                    ownUserId: ownUserId,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Text (and deleted) messages.
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       child: Align(
@@ -171,7 +254,6 @@ class _ReactionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Group reactions by emoji and count them.
     final grouped = <String, int>{};
     for (final r in reactions) {
       grouped[r.emoji] = (grouped[r.emoji] ?? 0) + 1;
@@ -183,18 +265,17 @@ class _ReactionRow extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+              color: Theme.of(context)
+                  .colorScheme
+                  .outline
+                  .withValues(alpha: 0.3),
             ),
           ),
           child: Text(
-            entry.value > 1
-                ? '${entry.key} ${entry.value}'
-                : entry.key,
+            entry.value > 1 ? '${entry.key} ${entry.value}' : entry.key,
             style: const TextStyle(fontSize: 13),
           ),
         );

@@ -20,6 +20,24 @@ class SendMessageParams {
   final String text;
 }
 
+class SendMediaParams {
+  const SendMediaParams({
+    required this.pairId,
+    required this.senderId,
+    required this.partnerId,
+    required this.contentType,
+    required this.localFilePath,
+    this.durationMs,
+  });
+
+  final String pairId;
+  final String senderId;
+  final String partnerId;
+  final String contentType; // 'image' | 'voice'
+  final String localFilePath;
+  final int? durationMs; // voice messages only
+}
+
 class LoadMoreParams {
   const LoadMoreParams({
     required this.pairId,
@@ -47,30 +65,26 @@ abstract interface class ChatRepository {
 
   // ── M5: Message features ──────────────────────────────────────────────────
 
-  /// Re-encrypts and sends the edited text; updates local cache.
   Future<Either<Failure, Message>> editMessage(EditMessageParams params);
 
-  /// Soft-deletes the message on server and marks it locally.
   Future<Either<Failure, void>> deleteMessage(String messageId);
 
-  /// Adds or replaces the caller's reaction on a message.
   Future<Either<Failure, void>> reactToMessage(ReactToMessageParams params);
 
-  /// Removes the caller's reaction from a message.
   Future<Either<Failure, void>> removeReaction({
     required String messageId,
     required String pairId,
   });
 
-  /// Marks all messages from the partner as 'read'.
   Future<Either<Failure, void>> markAllRead(String pairId);
 
-  /// Live stream of all reactions grouped by message ID.
   Stream<Map<String, List<Reaction>>> watchReactions(String pairId);
 
-  /// Broadcasts the caller's typing state to the partner.
   Future<void> sendTyping(String pairId, {required bool isTyping});
 
-  /// Stream of the partner's typing state.
   Stream<bool> watchTyping(String pairId);
+
+  // ── M6: Media messages ────────────────────────────────────────────────────
+
+  Future<Either<Failure, Message>> sendMediaMessage(SendMediaParams params);
 }

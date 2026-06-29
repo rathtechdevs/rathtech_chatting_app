@@ -18,6 +18,8 @@ class ChatReady extends ChatState {
     this.hasMoreMessages = true,
     this.isSending = false,
     this.isPartnerTyping = false,
+    this.isRecording = false,
+    this.recordingDuration = Duration.zero,
     this.sendError,
   });
 
@@ -28,6 +30,8 @@ class ChatReady extends ChatState {
   final bool hasMoreMessages;
   final bool isSending;
   final bool isPartnerTyping;
+  final bool isRecording;
+  final Duration recordingDuration;
   final String? sendError;
 
   ChatReady copyWith({
@@ -38,6 +42,8 @@ class ChatReady extends ChatState {
     bool? hasMoreMessages,
     bool? isSending,
     bool? isPartnerTyping,
+    bool? isRecording,
+    Duration? recordingDuration,
     String? Function()? sendError,
   }) {
     return ChatReady(
@@ -48,6 +54,8 @@ class ChatReady extends ChatState {
       hasMoreMessages: hasMoreMessages ?? this.hasMoreMessages,
       isSending: isSending ?? this.isSending,
       isPartnerTyping: isPartnerTyping ?? this.isPartnerTyping,
+      isRecording: isRecording ?? this.isRecording,
+      recordingDuration: recordingDuration ?? this.recordingDuration,
       sendError: sendError != null ? sendError() : this.sendError,
     );
   }

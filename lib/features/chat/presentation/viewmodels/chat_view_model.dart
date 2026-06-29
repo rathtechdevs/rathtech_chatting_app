@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 
 import '../../../../core/logger/app_logger.dart';
 import '../../domain/repositories/chat_repository.dart';
@@ -15,6 +18,9 @@ class ChatViewModel extends Notifier<ChatState> {
   String get _partnerId => ref.read(chatPartnerIdProvider);
 
   Timer? _typingStopTimer;
+  Timer? _recordingTimer;
+  AudioRecorder? _audioRecorder;
+  int _recordingMs = 0;
 
   @override
   ChatState build() {
@@ -24,6 +30,9 @@ class ChatViewModel extends Notifier<ChatState> {
     repo.startRealtimeListener(pairId);
     ref.onDispose(() async {
       _typingStopTimer?.cancel();
+      _recordingTimer?.cancel();
+      await _audioRecorder?.dispose();
+      _audioRecorder = null;
       await repo.sendTyping(pairId, isTyping: false);
       await repo.stopRealtimeListener(pairId);
     });
@@ -57,7 +66,7 @@ class ChatViewModel extends Notifier<ChatState> {
     });
     ref.onDispose(reactionSub.cancel);
 
-    // Typing stream (channel must be started first — done above)
+    // Typing stream
     final typingSub = repo.watchTyping(pairId).listen((isTyping) {
       if (state case final ChatReady ready) {
         state = ready.copyWith(isPartnerTyping: isTyping);
@@ -109,8 +118,74 @@ class ChatViewModel extends Notifier<ChatState> {
       },
     );
 
-    // Stop typing indicator when message is sent.
     _broadcastTyping(false);
+  }
+
+  Future<void> sendImageMessage(String localPath) async {
+    if (state case final ChatReady current) {
+      state = current.copyWith(isSending: true, sendError: () => null);
+    }
+
+    final result = await ref.read(sendMediaMessageUseCaseProvider).execute(
+          SendMediaParams(
+            pairId: _pairId,
+            senderId: _ownUserId,
+            partnerId: _partnerId,
+            contentType: 'image',
+            localFilePath: localPath,
+          ),
+        );
+
+    result.fold(
+      (failure) {
+        AppLogger.error('sendImageMessage failed', failure);
+        if (state case final ChatReady ready) {
+          state = ready.copyWith(
+            isSending: false,
+            sendError: () => failure.message,
+          );
+        }
+      },
+      (_) {
+        if (state case final ChatReady ready) {
+          state = ready.copyWith(isSending: false, sendError: () => null);
+        }
+      },
+    );
+  }
+
+  Future<void> sendVoiceMessage(String localPath, int durationMs) async {
+    if (state case final ChatReady current) {
+      state = current.copyWith(isSending: true, sendError: () => null);
+    }
+
+    final result = await ref.read(sendMediaMessageUseCaseProvider).execute(
+          SendMediaParams(
+            pairId: _pairId,
+            senderId: _ownUserId,
+            partnerId: _partnerId,
+            contentType: 'voice',
+            localFilePath: localPath,
+            durationMs: durationMs,
+          ),
+        );
+
+    result.fold(
+      (failure) {
+        AppLogger.error('sendVoiceMessage failed', failure);
+        if (state case final ChatReady ready) {
+          state = ready.copyWith(
+            isSending: false,
+            sendError: () => failure.message,
+          );
+        }
+      },
+      (_) {
+        if (state case final ChatReady ready) {
+          state = ready.copyWith(isSending: false, sendError: () => null);
+        }
+      },
+    );
   }
 
   Future<void> loadMore() async {
@@ -142,6 +217,93 @@ class ChatViewModel extends Notifier<ChatState> {
           }
         },
       );
+    }
+  }
+
+  // ── Voice recording ────────────────────────────────────────────────────────
+
+  Future<void> startRecording() async {
+    final recorder = AudioRecorder();
+    if (!await recorder.hasPermission()) {
+      await recorder.dispose();
+      return;
+    }
+
+    final dir = await getTemporaryDirectory();
+    final path =
+        '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+    await recorder.start(const RecordConfig(), path: path);
+
+    _audioRecorder = recorder;
+    _recordingMs = 0;
+
+    _recordingTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      _recordingMs += 100;
+      if (state case final ChatReady ready) {
+        state = ready.copyWith(
+          recordingDuration: Duration(milliseconds: _recordingMs),
+        );
+      }
+    });
+
+    if (state case final ChatReady ready) {
+      state = ready.copyWith(isRecording: true);
+    }
+  }
+
+  Future<void> stopRecordingAndSend() async {
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+
+    final durationMs = _recordingMs;
+    final recorder = _audioRecorder;
+    _audioRecorder = null;
+
+    if (state case final ChatReady ready) {
+      state = ready.copyWith(
+        isRecording: false,
+        recordingDuration: Duration.zero,
+      );
+    }
+
+    final path = await recorder?.stop();
+    await recorder?.dispose();
+
+    if (path == null || durationMs < 1000) {
+      // Discard recordings shorter than 1 second.
+      if (path != null) {
+        try {
+          await File(path).delete();
+        } catch (_) {}
+      }
+      return;
+    }
+
+    await sendVoiceMessage(path, durationMs);
+  }
+
+  Future<void> cancelRecording() async {
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+
+    final recorder = _audioRecorder;
+    _audioRecorder = null;
+
+    if (state case final ChatReady ready) {
+      state = ready.copyWith(
+        isRecording: false,
+        recordingDuration: Duration.zero,
+      );
+    }
+
+    final path = await recorder?.stop();
+    await recorder?.dispose();
+
+    if (path != null) {
+      try {
+        await File(path).delete();
+      } catch (_) {}
     }
   }
 
@@ -224,7 +386,6 @@ class ChatViewModel extends Notifier<ChatState> {
     _typingStopTimer?.cancel();
     _broadcastTyping(isTyping);
     if (isTyping) {
-      // Auto-stop after 3 s of no new updates to avoid stale "typing" indicators.
       _typingStopTimer = Timer(
         const Duration(seconds: 3),
         () => _broadcastTyping(false),

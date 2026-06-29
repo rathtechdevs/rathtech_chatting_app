@@ -4,6 +4,7 @@ import '../../core/encryption/providers.dart';
 import '../../core/network/supabase_client_provider.dart';
 import '../../core/storage/app_database.dart';
 import '../auth/providers.dart';
+import '../media/providers.dart';
 import '../pairing/providers.dart';
 import 'data/data_sources/local/chat_local_data_source.dart';
 import 'data/data_sources/remote/chat_remote_data_source.dart';
@@ -14,6 +15,7 @@ import 'domain/use_cases/edit_message_use_case.dart';
 import 'domain/use_cases/load_more_messages_use_case.dart';
 import 'domain/use_cases/mark_all_read_use_case.dart';
 import 'domain/use_cases/react_to_message_use_case.dart';
+import 'domain/use_cases/send_media_message_use_case.dart';
 import 'domain/use_cases/send_message_use_case.dart';
 import 'domain/use_cases/watch_messages_use_case.dart';
 import 'presentation/viewmodels/chat_state.dart';
@@ -54,6 +56,8 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
     local: ref.watch(chatLocalDataSourceProvider),
     encryption: ref.watch(encryptionServiceProvider),
     keyBundleRemote: ref.watch(keyBundleRemoteDataSourceProvider),
+    mediaRemote: ref.watch(mediaRemoteDataSourceProvider),
+    mediaCache: ref.watch(mediaCacheServiceProvider),
     ownUserId: ref.watch(chatOwnUserIdProvider),
   );
   ref.onDispose(impl.dispose);
@@ -91,6 +95,12 @@ final reactToMessageUseCaseProvider = Provider<ReactToMessageUseCase>((ref) {
 final markAllReadUseCaseProvider = Provider<MarkAllReadUseCase>((ref) {
   return MarkAllReadUseCase(ref.watch(chatRepositoryProvider));
 });
+
+// ── Use cases — M6 ───────────────────────────────────────────────────────────
+
+final sendMediaMessageUseCaseProvider = Provider<SendMediaMessageUseCase>(
+  (ref) => SendMediaMessageUseCase(ref.watch(chatRepositoryProvider)),
+);
 
 // ── View model ────────────────────────────────────────────────────────────────
 

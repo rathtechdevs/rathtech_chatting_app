@@ -59,6 +59,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SecureChat needs microphone access to record voice messages.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SecureChat needs camera access to take photos to send.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>SecureChat needs photo library access to send images.</string>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

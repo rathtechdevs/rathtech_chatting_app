@@ -11,6 +11,7 @@ import '../features/auth/presentation/screens/otp_verification_screen.dart';
 import '../features/auth/presentation/screens/setup_profile_screen.dart';
 import '../features/auth/providers.dart';
 import '../features/chat/presentation/screens/chat_screen.dart';
+import '../features/chat/presentation/screens/image_viewer_screen.dart';
 import '../features/pairing/domain/entities/pair.dart';
 import '../features/pairing/presentation/screens/enter_invite_screen.dart';
 import '../features/pairing/presentation/screens/generate_invite_screen.dart';
@@ -155,6 +156,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.chat,
         builder: (_, state) => const ChatScreen(),
+      ),
+
+      // ── Image viewer (M6) ──────────────────────────────────────────────────
+      GoRoute(
+        path: AppRoutes.imageViewer,
+        builder: (_, state) {
+          final extra =
+              state.extra! as ({String localPath, String heroTag});
+          return ImageViewerScreen(
+            localPath: extra.localPath,
+            heroTag: extra.heroTag,
+          );
+        },
       ),
     ],
   );
