@@ -15,6 +15,7 @@ typedef ReactionEvent = ({Map<String, dynamic> record, bool isAdded});
 abstract interface class ChatRemoteDataSource {
   // ── CRUD ───────────────────────────────────────────────────────────────────
   Future<Map<String, dynamic>> insertMessage({
+    required String id,
     required String pairId,
     required String senderId,
     required EncryptedPayload payload,
@@ -34,6 +35,13 @@ abstract interface class ChatRemoteDataSource {
     required String pairId,
     required DateTime before,
     required int limit,
+  });
+
+  /// Returns messages sent after [since], in ascending order (oldest first).
+  Future<List<Map<String, dynamic>>> fetchMessagesSince({
+    required String pairId,
+    required DateTime since,
+    int limit,
   });
 
   Future<void> markDelivered(String messageId);
@@ -60,6 +68,10 @@ abstract interface class ChatRemoteDataSource {
   // ── Realtime (single channel per pair) ────────────────────────────────────
 
   void startListening(String pairId);
+
+  /// Fires (null) each time the Realtime channel for [pairId] subscribes or
+  /// re-subscribes (e.g. after a reconnect).
+  Stream<void> channelSubscribeEvents(String pairId);
 
   /// INSERT events on `messages` for this pair.
   Stream<Map<String, dynamic>> newMessages(String pairId);
@@ -94,17 +106,21 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
   final Map<String, StreamController<Map<String, dynamic>>> _updateCtrls = {};
   final Map<String, StreamController<ReactionEvent>> _reactionCtrls = {};
   final Map<String, StreamController<bool>> _typingCtrls = {};
+  // Fires on every (re-)subscribe — used to trigger gap-fill and outbox flush.
+  final Map<String, StreamController<void>> _subscribeCtrls = {};
 
   // ── CRUD ─────────────────────────────────────────────────────────────────
 
   @override
   Future<Map<String, dynamic>> insertMessage({
+    required String id,
     required String pairId,
     required String senderId,
     required EncryptedPayload payload,
   }) async {
     try {
       final rows = await _client.from('messages').insert({
+        'id': id,
         'pair_id': pairId,
         'sender_id': senderId,
         'message_type': 'text',
@@ -174,6 +190,30 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
       return List<Map<String, dynamic>>.from(rows);
     } on PostgrestException catch (e) {
       AppLogger.error('fetchMessagesBefore failed', e);
+      throw ServerException(
+        message: e.message,
+        statusCode: int.tryParse(e.code ?? ''),
+      );
+    }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchMessagesSince({
+    required String pairId,
+    required DateTime since,
+    int limit = 100,
+  }) async {
+    try {
+      final rows = await _client
+          .from('messages')
+          .select()
+          .eq('pair_id', pairId)
+          .gt('sent_at', since.toIso8601String())
+          .order('sent_at', ascending: true)
+          .limit(limit);
+      return List<Map<String, dynamic>>.from(rows);
+    } on PostgrestException catch (e) {
+      AppLogger.error('fetchMessagesSince failed', e);
       throw ServerException(
         message: e.message,
         statusCode: int.tryParse(e.code ?? ''),
@@ -323,6 +363,13 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     };
     _typingCtrls[pairId] = typingCtrl;
 
+    // Broadcast-mode so multiple listeners (e.g. repo) can subscribe.
+    final subscribeCtrl = StreamController<void>.broadcast();
+    subscribeCtrl.onCancel = () async {
+      if (!subscribeCtrl.isClosed) await subscribeCtrl.close();
+    };
+    _subscribeCtrls[pairId] = subscribeCtrl;
+
     _channels[pairId] = _client
         .channel('chat_$pairId')
         .onPostgresChanges(
@@ -378,8 +425,16 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
             if (!typingCtrl.isClosed) typingCtrl.add(isTyping);
           },
         )
-        .subscribe();
+        .subscribe((status, _) {
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            if (!subscribeCtrl.isClosed) subscribeCtrl.add(null);
+          }
+        });
   }
+
+  @override
+  Stream<void> channelSubscribeEvents(String pairId) =>
+      _subscribeCtrls[pairId]?.stream ?? const Stream.empty();
 
   @override
   Stream<Map<String, dynamic>> newMessages(String pairId) =>
@@ -416,5 +471,6 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     await _updateCtrls.remove(pairId)?.close();
     await _reactionCtrls.remove(pairId)?.close();
     await _typingCtrls.remove(pairId)?.close();
+    await _subscribeCtrls.remove(pairId)?.close();
   }
 }

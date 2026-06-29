@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/components/offline_banner.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/extensions/datetime_extensions.dart';
+import '../../../../core/network/connectivity_service.dart';
 import '../../../profile/presentation/widgets/avatar_widget.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/reaction.dart';
@@ -52,10 +54,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final state = ref.watch(chatViewModelProvider);
     final ownUserId = ref.watch(chatOwnUserIdProvider);
 
+    final isOnline =
+        ref.watch(isOnlineProvider).valueOrNull ?? true;
+    final queuedCount =
+        ref.watch(outboxPendingCountProvider).valueOrNull ?? 0;
+
     return Scaffold(
       appBar: _buildAppBar(context, state),
       body: Column(
         children: [
+          OfflineBanner(isOffline: !isOnline, queuedCount: queuedCount),
           Expanded(child: _buildBody(context, state, ownUserId)),
           _buildInput(state),
         ],

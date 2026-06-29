@@ -11,6 +11,8 @@ import 'package:rathtech_chatting_app/core/encryption/remote/key_bundle_remote_d
 import 'package:rathtech_chatting_app/core/error/exceptions.dart';
 import 'package:rathtech_chatting_app/core/error/failures.dart';
 import 'package:rathtech_chatting_app/core/media/media_cache_service.dart';
+import 'package:rathtech_chatting_app/core/network/connectivity_service.dart';
+import 'package:rathtech_chatting_app/core/offline/outbox_queue_data_source.dart';
 import 'package:rathtech_chatting_app/core/storage/app_database.dart';
 import 'package:rathtech_chatting_app/features/chat/data/data_sources/local/chat_local_data_source.dart';
 import 'package:rathtech_chatting_app/features/chat/data/data_sources/remote/chat_remote_data_source.dart';
@@ -32,9 +34,16 @@ class _MockMediaRemoteDataSource extends Mock implements MediaRemoteDataSource {
 
 class _MockMediaCacheService extends Mock implements MediaCacheService {}
 
+class _MockConnectivityService extends Mock implements ConnectivityService {}
+
+class _MockOutboxQueueDataSource extends Mock
+    implements OutboxQueueDataSource {}
+
 class _FakeEncryptedPayload extends Fake implements EncryptedPayload {}
 
 class _FakeLocalMessagesCompanion extends Fake implements LocalMessagesCompanion {}
+
+class _FakeOutboxQueueCompanion extends Fake implements OutboxQueueCompanion {}
 
 class _FakeKeyBundle extends Fake implements KeyBundle {}
 
@@ -49,6 +58,8 @@ void main() {
   late _MockKeyBundleRemoteDataSource keyBundle;
   late _MockMediaRemoteDataSource mediaRemote;
   late _MockMediaCacheService mediaCache;
+  late _MockConnectivityService connectivity;
+  late _MockOutboxQueueDataSource outbox;
   late ChatRepositoryImpl repository;
 
   const tPairId = 'pair-id';
@@ -83,9 +94,12 @@ void main() {
     keyBundle = _MockKeyBundleRemoteDataSource();
     mediaRemote = _MockMediaRemoteDataSource();
     mediaCache = _MockMediaCacheService();
+    connectivity = _MockConnectivityService();
+    outbox = _MockOutboxQueueDataSource();
 
     registerFallbackValue(_FakeEncryptedPayload());
     registerFallbackValue(_FakeLocalMessagesCompanion());
+    registerFallbackValue(_FakeOutboxQueueCompanion());
     registerFallbackValue(_FakeKeyBundle());
     registerFallbackValue(_FakeSendMessageParams());
     registerFallbackValue(_FakeSendMediaParams());
@@ -98,11 +112,13 @@ void main() {
       keyBundleRemote: keyBundle,
       mediaRemote: mediaRemote,
       mediaCache: mediaCache,
+      outboxQueue: outbox,
+      connectivity: connectivity,
       ownUserId: tSenderId,
     );
   });
 
-  group('sendMessage', () {
+  group('sendMessage (online)', () {
     const tParams = SendMessageParams(
       pairId: tPairId,
       senderId: tSenderId,
@@ -110,17 +126,20 @@ void main() {
       text: tText,
     );
 
-    test('encrypts, posts to server, stores locally, returns Right(Message)',
+    test('encrypts, posts to server, updates status to sent, returns Right(Message)',
         () async {
       when(() => encryption.hasSession(tPairId)).thenReturn(true);
       when(() => encryption.encrypt(pairId: tPairId, plaintext: tText))
           .thenAnswer((_) async => const Right(tPayload));
+      when(() => connectivity.isOnline).thenAnswer((_) async => true);
+      when(() => local.upsertMessage(any())).thenAnswer((_) async {});
+      when(() => local.updateStatus(any(), any())).thenAnswer((_) async {});
       when(() => remote.insertMessage(
+            id: any(named: 'id'),
             pairId: tPairId,
             senderId: tSenderId,
             payload: any(named: 'payload'),
           )).thenAnswer((_) async => tRow);
-      when(() => local.upsertMessage(any())).thenAnswer((_) async {});
 
       final result = await repository.sendMessage(tParams);
 
@@ -131,14 +150,15 @@ void main() {
       expect(msg.text, tText);
       expect(msg.status, MessageStatus.sent);
 
-      verify(() => encryption.encrypt(pairId: tPairId, plaintext: tText))
-          .called(1);
+      verify(() => local.upsertMessage(any())).called(1);
       verify(() => remote.insertMessage(
+            id: any(named: 'id'),
             pairId: tPairId,
             senderId: tSenderId,
             payload: any(named: 'payload'),
           )).called(1);
-      verify(() => local.upsertMessage(any())).called(1);
+      verify(() => local.updateStatus(any(), 'sent')).called(1);
+      verifyNever(() => outbox.enqueue(any()));
     });
 
     test('initializes session via X3DH if hasSession returns false', () async {
@@ -160,12 +180,15 @@ void main() {
           )).thenAnswer((_) async => const Right(null));
       when(() => encryption.encrypt(pairId: tPairId, plaintext: tText))
           .thenAnswer((_) async => const Right(tPayload));
+      when(() => connectivity.isOnline).thenAnswer((_) async => true);
+      when(() => local.upsertMessage(any())).thenAnswer((_) async {});
+      when(() => local.updateStatus(any(), any())).thenAnswer((_) async {});
       when(() => remote.insertMessage(
+            id: any(named: 'id'),
             pairId: any(named: 'pairId'),
             senderId: any(named: 'senderId'),
             payload: any(named: 'payload'),
           )).thenAnswer((_) async => tRow);
-      when(() => local.upsertMessage(any())).thenAnswer((_) async {});
 
       final result = await repository.sendMessage(tParams);
 
@@ -188,6 +211,43 @@ void main() {
 
       expect(result.isLeft(), isTrue);
       verifyNever(() => remote.insertMessage(
+            id: any(named: 'id'),
+            pairId: any(named: 'pairId'),
+            senderId: any(named: 'senderId'),
+            payload: any(named: 'payload'),
+          ));
+    });
+  });
+
+  group('sendMessage (offline)', () {
+    const tParams = SendMessageParams(
+      pairId: tPairId,
+      senderId: tSenderId,
+      partnerId: tPartnerId,
+      text: tText,
+    );
+
+    test(
+        'stores locally with pending status, enqueues in outbox, '
+        'returns Right(Message) with pending status', () async {
+      when(() => encryption.hasSession(tPairId)).thenReturn(true);
+      when(() => encryption.encrypt(pairId: tPairId, plaintext: tText))
+          .thenAnswer((_) async => const Right(tPayload));
+      when(() => connectivity.isOnline).thenAnswer((_) async => false);
+      when(() => local.upsertMessage(any())).thenAnswer((_) async {});
+      when(() => outbox.enqueue(any())).thenAnswer((_) async {});
+
+      final result = await repository.sendMessage(tParams);
+
+      expect(result.isRight(), isTrue);
+      final msg = result.getOrElse((_) => throw Exception());
+      expect(msg.status, MessageStatus.pending);
+      expect(msg.text, tText);
+
+      verify(() => local.upsertMessage(any())).called(1);
+      verify(() => outbox.enqueue(any())).called(1);
+      verifyNever(() => remote.insertMessage(
+            id: any(named: 'id'),
             pairId: any(named: 'pairId'),
             senderId: any(named: 'senderId'),
             payload: any(named: 'payload'),

@@ -162,7 +162,12 @@ abstract final class AppStrings {
   static const appLockAfter15min = '15 minutes';
 
   // ── Offline ───────────────────────────────────────────────────────────────
-  static const offlineBannerLabel = 'No connection — messages will send when online';
+  static const offlineBannerLabel = 'You\'re offline — messages will send when online';
+
+  static String offlineBannerWithQueue(int count) {
+    final noun = count == 1 ? 'message' : 'messages';
+    return 'You\'re offline · $count $noun queued';
+  }
 
   // ── Permissions ───────────────────────────────────────────────────────────
   static const permissionDeniedCamera = 'Camera access denied. Enable it in Settings.';

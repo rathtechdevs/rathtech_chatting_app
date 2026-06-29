@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:fpdart/fpdart.dart';
 
@@ -14,6 +15,8 @@ import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/logger/app_logger.dart';
 import '../../../../core/media/media_cache_service.dart';
+import '../../../../core/network/connectivity_service.dart';
+import '../../../../core/offline/outbox_queue_data_source.dart';
 import '../../../../core/storage/app_database.dart';
 import '../../../../features/media/data/data_sources/media_remote_data_source.dart';
 import '../../domain/entities/message.dart';
@@ -33,6 +36,8 @@ class ChatRepositoryImpl implements ChatRepository {
     required this.keyBundleRemote,
     required this.mediaRemote,
     required this.mediaCache,
+    required this.outboxQueue,
+    required this.connectivity,
     required this.ownUserId,
   });
 
@@ -42,7 +47,11 @@ class ChatRepositoryImpl implements ChatRepository {
   final KeyBundleRemoteDataSource keyBundleRemote;
   final MediaRemoteDataSource mediaRemote;
   final MediaCacheService mediaCache;
+  final OutboxQueueDataSource outboxQueue;
+  final ConnectivityService connectivity;
   final String ownUserId;
+
+  static const int _maxOutboxAttempts = 10;
 
   // Subscriptions keyed by '<type>_<pairId>' to allow multiple per pair.
   final Map<String, StreamSubscription<dynamic>> _subs = {};
@@ -64,27 +73,59 @@ class ChatRepositoryImpl implements ChatRepository {
       return encryptResult.fold(
         Left.new,
         (payload) async {
+          final localId = _generateUuid();
+          final now = DateTime.now().toUtc();
+
+          // Store locally first — message appears immediately in the UI.
+          await local.upsertMessage(MessageDto.toCompanion(
+            id: localId,
+            pairId: params.pairId,
+            senderId: params.senderId,
+            contentType: 'text',
+            status: 'pending',
+            createdAt: now,
+            decryptedText: params.text,
+          ));
+
+          final isOnline = await connectivity.isOnline;
+
+          if (!isOnline) {
+            // Queue for delivery when connectivity restores.
+            await outboxQueue.enqueue(OutboxQueueCompanion.insert(
+              id: localId,
+              pairId: params.pairId,
+              encryptedPayload: Uint8List.fromList(
+                utf8.encode(jsonEncode(payload.toJson())),
+              ),
+              messageType: 'text',
+              createdAt: now,
+              nextRetryAt: now,
+            ));
+
+            return Right(Message(
+              id: localId,
+              pairId: params.pairId,
+              senderId: params.senderId,
+              contentType: 'text',
+              text: params.text,
+              status: MessageStatus.pending,
+              createdAt: now,
+            ));
+          }
+
+          // Online — send immediately.
           final row = await remote.insertMessage(
+            id: localId,
             pairId: params.pairId,
             senderId: params.senderId,
             payload: payload,
           );
 
-          final id = row['id'] as String;
-          final sentAt = DateTime.parse(row['sent_at'] as String);
-          final companion = MessageDto.toCompanion(
-            id: id,
-            pairId: params.pairId,
-            senderId: params.senderId,
-            contentType: 'text',
-            status: 'sent',
-            createdAt: sentAt,
-            decryptedText: params.text,
-          );
-          await local.upsertMessage(companion);
+          await local.updateStatus(localId, 'sent');
 
+          final sentAt = DateTime.tryParse(row['sent_at'] as String? ?? '') ?? now;
           return Right(Message(
-            id: id,
+            id: localId,
             pairId: params.pairId,
             senderId: params.senderId,
             contentType: 'text',
@@ -207,6 +248,13 @@ class ChatRepositoryImpl implements ChatRepository {
     if (_subs.containsKey('new_$pairId')) return;
 
     remote.startListening(pairId);
+
+    // Channel (re-)subscribe → gap fill + outbox flush.
+    _subs['subscribe_$pairId'] =
+        remote.channelSubscribeEvents(pairId).listen((_) async {
+      await _fillGap(pairId);
+      await _flushOutbox(pairId);
+    });
 
     // New messages (INSERT)
     _subs['new_$pairId'] = remote.newMessages(pairId).listen(
@@ -333,6 +381,7 @@ class ChatRepositoryImpl implements ChatRepository {
 
   @override
   Future<void> stopRealtimeListener(String pairId) async {
+    await _subs.remove('subscribe_$pairId')?.cancel();
     await _subs.remove('new_$pairId')?.cancel();
     await _subs.remove('update_$pairId')?.cancel();
     await _subs.remove('reaction_$pairId')?.cancel();
@@ -587,6 +636,132 @@ class ChatRepositoryImpl implements ChatRepository {
     for (final pairId in pairIds) {
       await remote.removeChannel(pairId);
     }
+  }
+
+  // ── Offline: gap fill ─────────────────────────────────────────────────────
+
+  Future<void> _fillGap(String pairId) async {
+    try {
+      final latest = await local.getLatestMessage(pairId);
+      if (latest == null) return; // No local messages — nothing to fill.
+
+      final rows = await remote.fetchMessagesSince(
+        pairId: pairId,
+        since: latest.createdAt,
+        limit: 100,
+      );
+
+      for (final row in rows) {
+        try {
+          final senderId = row['sender_id'] as String;
+          if (senderId == ownUserId) continue; // Own messages already stored.
+
+          final contentType = row['message_type'] as String? ?? 'text';
+          final id = row['id'] as String;
+          final sentAt = DateTime.parse(row['sent_at'] as String);
+
+          if (contentType == 'text') {
+            final payload = _payloadFromRow(row);
+            final decryptResult = await encryption.decrypt(
+              pairId: pairId,
+              payload: payload,
+            );
+            final text = decryptResult.getOrElse((_) => '[Decryption failed]');
+
+            await local.upsertMessage(MessageDto.toCompanion(
+              id: id,
+              pairId: pairId,
+              senderId: senderId,
+              contentType: 'text',
+              status: 'delivered',
+              createdAt: sentAt,
+              decryptedText: text,
+            ));
+            await remote.markDelivered(id);
+          } else {
+            await _processIncomingMediaMessage(pairId: pairId, row: row);
+          }
+        } catch (e, stack) {
+          AppLogger.error('_fillGap: failed to process row', e, stack);
+        }
+      }
+    } catch (e, stack) {
+      AppLogger.error('_fillGap failed for $pairId', e, stack);
+    }
+  }
+
+  // ── Offline: outbox flush ─────────────────────────────────────────────────
+
+  Future<void> _flushOutbox(String pairId) async {
+    final now = DateTime.now().toUtc();
+    final items = await outboxQueue.getPendingDue(now);
+
+    for (final item in items) {
+      if (item.pairId != pairId) continue;
+
+      // If the message was already confirmed (e.g., via a prior flush attempt
+      // that partially succeeded), skip re-sending to avoid duplicates.
+      final existing = await local.getMessageById(item.id);
+      if (existing != null &&
+          existing.status != 'pending' &&
+          existing.status != 'failed') {
+        await outboxQueue.remove(item.id);
+        continue;
+      }
+
+      try {
+        final payloadJson =
+            jsonDecode(utf8.decode(item.encryptedPayload)) as Map<String, dynamic>;
+        final payload = EncryptedPayload.fromJson(payloadJson);
+
+        final row = await remote.insertMessage(
+          id: item.id,
+          pairId: item.pairId,
+          senderId: ownUserId,
+          payload: payload,
+        );
+
+        final sentAt =
+            DateTime.tryParse(row['sent_at'] as String? ?? '') ?? now;
+        await local.upsertMessage(MessageDto.toCompanion(
+          id: item.id,
+          pairId: item.pairId,
+          senderId: ownUserId,
+          contentType: item.messageType,
+          status: 'sent',
+          createdAt: sentAt,
+        ));
+
+        await outboxQueue.remove(item.id);
+      } on ServerException catch (e) {
+        AppLogger.error('_flushOutbox: server error for ${item.id}', e);
+
+        final newCount = item.attemptCount + 1;
+        if (newCount >= _maxOutboxAttempts) {
+          await outboxQueue.markFailed(item.id);
+          await local.updateStatus(item.id, 'failed');
+        } else {
+          final nextRetry = now.add(_retryDelay(newCount));
+          await outboxQueue.updateRetry(
+            id: item.id,
+            newAttemptCount: newCount,
+            nextRetryAt: nextRetry,
+          );
+        }
+      } catch (e, stack) {
+        AppLogger.error(
+            '_flushOutbox: unexpected error for ${item.id}', e, stack);
+      }
+    }
+  }
+
+  static Duration _retryDelay(int attemptCount) {
+    return switch (attemptCount) {
+      0 => Duration.zero,
+      1 => const Duration(seconds: 5),
+      2 => const Duration(seconds: 30),
+      _ => const Duration(minutes: 5),
+    };
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────

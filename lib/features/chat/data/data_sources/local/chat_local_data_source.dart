@@ -14,6 +14,12 @@ abstract interface class ChatLocalDataSource {
     required int limit,
   });
 
+  /// Returns the most-recent message for [pairId], or null if none.
+  Future<LocalMessage?> getLatestMessage(String pairId);
+
+  /// Returns the message with [id], or null if not found.
+  Future<LocalMessage?> getMessageById(String id);
+
   // Reactions
   Future<void> upsertReaction(LocalReactionsCompanion companion);
   Future<void> deleteReaction({
@@ -104,6 +110,30 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
           ])
           ..limit(limit))
         .get();
+  }
+
+  @override
+  Future<LocalMessage?> getLatestMessage(String pairId) async {
+    final rows = await (_db.select(_db.localMessages)
+          ..where(($LocalMessagesTable m) => m.pairId.equals(pairId))
+          ..orderBy([
+            ($LocalMessagesTable m) => OrderingTerm(
+                  expression: m.createdAt,
+                  mode: OrderingMode.desc,
+                ),
+          ])
+          ..limit(1))
+        .get();
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  @override
+  Future<LocalMessage?> getMessageById(String id) async {
+    final rows = await (_db.select(_db.localMessages)
+          ..where(($LocalMessagesTable m) => m.id.equals(id))
+          ..limit(1))
+        .get();
+    return rows.isEmpty ? null : rows.first;
   }
 
   @override

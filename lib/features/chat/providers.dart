@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/encryption/providers.dart';
+import '../../core/network/connectivity_service.dart';
 import '../../core/network/supabase_client_provider.dart';
+import '../../core/offline/outbox_queue_data_source.dart';
 import '../../core/storage/app_database.dart';
 import '../auth/providers.dart';
 import '../media/providers.dart';
@@ -51,6 +53,10 @@ final chatLocalDataSourceProvider = Provider<ChatLocalDataSource>((ref) {
   return ChatLocalDataSourceImpl(ref.watch(appDatabaseProvider));
 });
 
+final outboxQueueDataSourceProvider = Provider<OutboxQueueDataSource>((ref) {
+  return OutboxQueueDataSourceImpl(ref.watch(appDatabaseProvider));
+});
+
 // ── Repository ────────────────────────────────────────────────────────────────
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
@@ -61,10 +67,21 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
     keyBundleRemote: ref.watch(keyBundleRemoteDataSourceProvider),
     mediaRemote: ref.watch(mediaRemoteDataSourceProvider),
     mediaCache: ref.watch(mediaCacheServiceProvider),
+    outboxQueue: ref.watch(outboxQueueDataSourceProvider),
+    connectivity: ref.watch(connectivityProvider),
     ownUserId: ref.watch(chatOwnUserIdProvider),
   );
   ref.onDispose(impl.dispose);
   return impl;
+});
+
+// ── Offline state ─────────────────────────────────────────────────────────────
+
+/// Count of messages pending delivery in the outbox for the current pair.
+final outboxPendingCountProvider = StreamProvider<int>((ref) {
+  final pairId = ref.watch(chatPairIdProvider);
+  if (pairId.isEmpty) return Stream.value(0);
+  return ref.watch(outboxQueueDataSourceProvider).watchPendingCount(pairId);
 });
 
 // ── Use cases — M4 ───────────────────────────────────────────────────────────

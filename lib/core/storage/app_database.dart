@@ -67,6 +67,8 @@ class LocalReactions extends Table {
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openDatabase());
 
+  AppDatabase.forTesting(super.executor);
+
   @override
   int get schemaVersion => 1;
 
