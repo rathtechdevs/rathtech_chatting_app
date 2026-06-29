@@ -1,0 +1,155 @@
+{
+  "project_info": {
+    "project_number": "531670640472",
+    "firebase_url": "https://mine-fca38-default-rtdb.firebaseio.com",
+    "project_id": "mine-fca38",
+    "storage_bucket": "mine-fca38.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:531670640472:android:3f81d8110f30d511ffe72d",
+        "android_client_info": {
+          "package_name": "com.example.my_port"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "531670640472-9r4oo3fentjlbhvoq5eiig13re4rmrg8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCG3_vDvddiW3nNPZ2f-3tVrhylIOB1TZs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "531670640472-9r4oo3fentjlbhvoq5eiig13re4rmrg8.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "531670640472-7h4a6dc2s3k9qt57lm7rbgv8nt4mgjct.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.rathinStartup"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:531670640472:android:d1bd383b6a4fd03dffe72d",
+        "android_client_info": {
+          "package_name": "com.example.rathin_startup"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "531670640472-9r4oo3fentjlbhvoq5eiig13re4rmrg8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCG3_vDvddiW3nNPZ2f-3tVrhylIOB1TZs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "531670640472-9r4oo3fentjlbhvoq5eiig13re4rmrg8.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "531670640472-7h4a6dc2s3k9qt57lm7rbgv8nt4mgjct.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.rathinStartup"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:531670640472:android:c7b42daab0e878baffe72d",
+        "android_client_info": {
+          "package_name": "com.example.rathtech_portfolio"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "531670640472-9r4oo3fentjlbhvoq5eiig13re4rmrg8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCG3_vDvddiW3nNPZ2f-3tVrhylIOB1TZs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "531670640472-9r4oo3fentjlbhvoq5eiig13re4rmrg8.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "531670640472-7h4a6dc2s3k9qt57lm7rbgv8nt4mgjct.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.rathinStartup"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:531670640472:android:95d1327b19fa076effe72d",
+        "android_client_info": {
+          "package_name": "com.rathtech.securechat"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "531670640472-9r4oo3fentjlbhvoq5eiig13re4rmrg8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCG3_vDvddiW3nNPZ2f-3tVrhylIOB1TZs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "531670640472-9r4oo3fentjlbhvoq5eiig13re4rmrg8.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "531670640472-7h4a6dc2s3k9qt57lm7rbgv8nt4mgjct.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.rathinStartup"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
