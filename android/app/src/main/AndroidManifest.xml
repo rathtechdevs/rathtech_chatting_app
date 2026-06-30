@@ -30,6 +30,15 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Deep link handler for Supabase magic link / OAuth redirects -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="io.supabase.securechat"
+                    android:host="login-callback"/>
+            </intent-filter>
         </activity>
         <!-- FCM high-priority notification channel -->
         <meta-data

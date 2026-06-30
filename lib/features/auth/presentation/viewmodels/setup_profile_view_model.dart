@@ -6,6 +6,7 @@ import '../../../../core/error/failure_message_mapper.dart';
 import '../../../profile/domain/use_cases/create_profile_use_case.dart';
 import '../../../profile/domain/value_objects/display_name.dart';
 import '../../../profile/providers.dart';
+import '../../providers.dart';
 import 'setup_profile_state.dart';
 
 class SetupProfileViewModel extends Notifier<SetupProfileState> {
@@ -72,6 +73,9 @@ class SetupProfileViewModel extends Notifier<SetupProfileState> {
           }
         }
 
+        // Restart watchAuthState so it re-checks hasProfile and emits
+        // AppAuthState.authenticated, allowing GoRouter to redirect to /pair.
+        ref.invalidate(authStateProvider);
         state = const SetupProfileSuccess();
       },
     );

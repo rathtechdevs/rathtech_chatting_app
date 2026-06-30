@@ -79,5 +79,17 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- URL scheme for Supabase magic link / OAuth redirects -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>io.supabase.securechat</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

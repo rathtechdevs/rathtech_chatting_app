@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/components/primary_button.dart';
-import '../../../../core/constants/app_routes.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/extensions/context_extensions.dart';
 import '../viewmodels/setup_profile_state.dart';
@@ -30,9 +28,9 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
   Widget build(BuildContext context) {
     ref.listen<SetupProfileState>(setupProfileViewModelProvider, (prev, next) {
       if (next is SetupProfileSuccess) {
-        // Session refresh triggers watchAuthState → authenticated → GoRouter
-        // redirects to /pair automatically. Navigate as fallback.
-        context.go(AppRoutes.pair);
+        // authStateProvider is invalidated by the ViewModel after success.
+        // watchAuthState re-runs, detects the new profile, emits authenticated,
+        // and GoRouter redirects to /pair automatically.
       } else if (next is SetupProfileError) {
         context.showSnackBar(next.message, isError: true);
       }
